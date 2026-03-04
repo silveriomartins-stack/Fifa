@@ -14,8 +14,6 @@ const SENHA = "1234"; // 🔑 Mude para a senha que quiser
 // ========== FUNÇÃO PARA DETECTAR DISPOSITIVO ==========
 function detectarDispositivo(userAgent) {
   const ua = userAgent.toLowerCase();
-  
-  // Detecta se é celular ou tablet
   const isMobile = /mobile|android|iphone|ipod|blackberry|opera mini|iemobile|wpdesktop/i.test(ua);
   const isTablet = /ipad|tablet|kindle|silk|playbook/i.test(ua);
   
@@ -79,17 +77,6 @@ app.get('/', (req, res) => {
         .status-value.on { background: #4CAF50; color: white; }
         .status-value.off { background: #f44336; color: white; }
         .status-value.mobile { background: #FF9800; color: white; }
-        
-        .device-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 50px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .device-mobile { background: #FF9800; color: white; }
-        .device-desktop { background: #2196F3; color: white; }
-        .device-tablet { background: #9C27B0; color: white; }
         
         .video-container {
             display: grid;
@@ -211,6 +198,26 @@ app.get('/', (req, res) => {
             display: block;
         }
         
+        .error-box {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 5px solid #f44336;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .permission-box {
+            background: #fff3e0;
+            color: #ef6c00;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 5px solid #ff9800;
+            margin: 10px 0;
+            display: none;
+        }
+        
         .info-box {
             background: #e3f2fd;
             padding: 20px;
@@ -241,6 +248,16 @@ app.get('/', (req, res) => {
         .role-camera { background: #FFF3E0; color: #FF9800; border-left: 5px solid #FF9800; }
         .role-viewer { background: #E3F2FD; color: #2196F3; border-left: 5px solid #2196F3; }
         
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn-primary { background: #4CAF50; color: white; }
+        
         @media (max-width: 768px) {
             .video-container { grid-template-columns: 1fr; }
         }
@@ -265,6 +282,10 @@ app.get('/', (req, res) => {
             </div>
         </div>
 
+        <!-- Mensagens de erro/permissão -->
+        <div id="errorBox" class="error-box"></div>
+        <div id="permissionBox" class="permission-box"></div>
+
         <!-- Badge de função -->
         <div id="roleBadge" class="role-badge"></div>
 
@@ -275,6 +296,11 @@ app.get('/', (req, res) => {
                     <video id="localVideo" autoplay playsinline muted></video>
                 </div>
                 <div id="localMessage" style="text-align: center; margin-top: 10px;"></div>
+                
+                <!-- Botão para tentar novamente (aparece em caso de erro) -->
+                <div id="retryButton" style="text-align: center; margin-top: 10px; display: none;">
+                    <button class="btn btn-primary" onclick="tentarNovamente()">🔄 Tentar Novamente</button>
+                </div>
             </div>
 
             <div class="image-container">
@@ -296,11 +322,12 @@ app.get('/', (req, res) => {
         </div>
 
         <div class="info-box">
-            <h4>📱 Como funciona (automático):</h4>
+            <h4>📱 Como funciona:</h4>
             <ol>
-                <li><strong>No CELULAR:</strong> A câmera liga sozinha e transmite o vídeo</li>
-                <li><strong>No COMPUTADOR:</strong> Apenas recebe e mostra o vídeo (sem tentar ligar câmera)</li>
-                <li><strong>Senha padrão:</strong> <strong>"1234"</strong> para liberar a visualização remota</li>
+                <li><strong>No CELULAR:</strong> A câmera liga sozinha (permita o acesso)</li>
+                <li><strong>No COMPUTADOR:</strong> Apenas visualiza (não pede câmera)</li>
+                <li><strong>Senha:</strong> <strong>"1234"</strong> para liberar a visualização</li>
+                <li><strong>Erro?</strong> Clique no botão "Tentar Novamente"</li>
             </ol>
         </div>
     </div>
@@ -320,11 +347,15 @@ app.get('/', (req, res) => {
         const localTitle = document.getElementById('localTitle');
         const localMessage = document.getElementById('localMessage');
         const roleBadge = document.getElementById('roleBadge');
+        const errorBox = document.getElementById('errorBox');
+        const permissionBox = document.getElementById('permissionBox');
+        const retryButton = document.getElementById('retryButton');
         
         // Estado
         let mediaStream = null;
         let visualizacaoLiberada = false;
         let isMobile = false;
+        let tentativas = 0;
         
         // ========== DETECÇÃO DE DISPOSITIVO ==========
         function detectarDispositivo() {
@@ -334,7 +365,6 @@ app.get('/', (req, res) => {
             
             if (isTablet) {
                 deviceTypeSpan.textContent = 'Tablet';
-                deviceTypeSpan.className = 'status-value';
                 return 'tablet';
             } else if (isMobile) {
                 deviceTypeSpan.textContent = 'Celular';
@@ -359,7 +389,7 @@ app.get('/', (req, res) => {
                 localTitle.innerHTML = '📱 Visualização Local (SUA CÂMERA)';
                 roleBadge.innerHTML = '📱 Você é a FONTE - Transmitindo vídeo';
                 roleBadge.className = 'role-badge role-camera';
-                localMessage.innerHTML = '✅ Transmitindo ao vivo...';
+                localMessage.innerHTML = '⏳ Aguardando permissão da câmera...';
                 
                 // Aguarda 1 segundo e liga a câmera
                 setTimeout(() => {
@@ -373,9 +403,9 @@ app.get('/', (req, res) => {
                 localTitle.innerHTML = '📱 Visualização Local (indisponível no PC)';
                 roleBadge.innerHTML = '💻 Você é VISUALIZADOR - Aguardando transmissão';
                 roleBadge.className = 'role-badge role-viewer';
-                localMessage.innerHTML = 'ℹ️ Este dispositivo é visualizador. A câmera não será ligada.';
+                localMessage.innerHTML = 'ℹ️ Este dispositivo é visualizador.';
                 
-                // Esconde o vídeo local (não tem câmera mesmo)
+                // Esconde o vídeo local
                 document.querySelector('.local-wrapper').style.background = '#333';
                 localVideo.style.display = 'none';
             }
@@ -384,26 +414,49 @@ app.get('/', (req, res) => {
         // ========== FUNÇÃO PARA CELULAR (LIGA CÂMERA) ==========
         async function ligarCameraCelular() {
             try {
-                console.log('📱 Celular detectado - ligando câmera...');
+                tentativas++;
+                console.log(\`📱 Tentativa \${tentativas} de ligar câmera...\`);
                 
-                // Solicita acesso à câmera
+                // Verifica se o navegador suporta
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Seu navegador não suporta acesso à câmera');
+                }
+                
+                // Primeiro, verifica se há câmeras disponíveis
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(d => d.kind === 'videoinput');
+                
+                if (cameras.length === 0) {
+                    permissionBox.style.display = 'block';
+                    permissionBox.innerHTML = '❌ Nenhuma câmera encontrada neste dispositivo.';
+                    retryButton.style.display = 'block';
+                    return;
+                }
+                
+                // Tenta acessar a câmera
+                localMessage.innerHTML = '📷 Solicitando acesso à câmera...';
+                
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        width: 640, 
-                        height: 480,
-                        facingMode: 'environment' // Câmera traseira
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'environment' // Tenta câmera traseira
                     },
                     audio: false
                 });
                 
+                // Sucesso!
                 mediaStream = stream;
-                
-                // Mostra vídeo local
                 localVideo.srcObject = stream;
                 localVideo.style.display = 'block';
                 
-                // Garante que o vídeo está tocando
                 await localVideo.play();
+                
+                // Limpa mensagens de erro
+                errorBox.style.display = 'none';
+                permissionBox.style.display = 'none';
+                retryButton.style.display = 'none';
+                localMessage.innerHTML = '✅ Câmera ligada e transmitindo!';
                 
                 // Canvas para capturar frames
                 const canvas = document.createElement('canvas');
@@ -420,15 +473,51 @@ app.get('/', (req, res) => {
                     } catch (e) {
                         console.log('Erro na captura:', e);
                     }
-                }, 200); // 5 fps
+                }, 200);
                 
-                console.log('✅ Câmera do celular ligada e transmitindo!');
+                console.log('✅ Câmera do celular ligada com sucesso!');
                 
             } catch (err) {
-                console.error('Erro ao ligar câmera no celular:', err);
-                localMessage.innerHTML = '❌ Erro: ' + err.message;
+                console.error('Erro detalhado:', err);
+                
+                // Tratamento específico para cada tipo de erro
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    permissionBox.style.display = 'block';
+                    permissionBox.innerHTML = `
+                        <strong>🔒 Permissão negada!</strong><br>
+                        Para usar a câmera, clique no cadeado 🔒 da URL e permita o acesso.<br>
+                        Depois clique em "Tentar Novamente".
+                    `;
+                } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    permissionBox.style.display = 'block';
+                    permissionBox.innerHTML = '❌ Nenhuma câmera encontrada neste dispositivo.';
+                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                    permissionBox.style.display = 'block';
+                    permissionBox.innerHTML = '❌ Câmera está sendo usada por outro aplicativo. Feche outros apps e tente novamente.';
+                } else if (err.name === 'OverconstrainedError') {
+                    permissionBox.style.display = 'block';
+                    permissionBox.innerHTML = '❌ Câmera não suporta a resolução solicitada.';
+                } else {
+                    errorBox.style.display = 'block';
+                    errorBox.innerHTML = \`❌ Erro: \${err.message}\`;
+                }
+                
+                retryButton.style.display = 'block';
+                localMessage.innerHTML = '❌ Falha ao ligar câmera';
             }
         }
+        
+        // ========== FUNÇÃO PARA TENTAR NOVAMENTE ==========
+        window.tentarNovamente = function() {
+            errorBox.style.display = 'none';
+            permissionBox.style.display = 'none';
+            retryButton.style.display = 'none';
+            localMessage.innerHTML = '⏳ Tentando novamente...';
+            
+            setTimeout(() => {
+                ligarCameraCelular();
+            }, 500);
+        };
         
         // ========== VERIFICAÇÃO DE SENHA ==========
         window.verificarSenha = function() {
@@ -458,32 +547,11 @@ app.get('/', (req, res) => {
             }
         });
         
-        // ========== FUNÇÃO PARA TIRAR FOTO (APENAS NO CELULAR) ==========
-        window.tirarFoto = function() {
-            if (!mediaStream) {
-                alert('Disponível apenas no celular que está transmitindo');
-                return;
-            }
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = 640;
-            canvas.height = 480;
-            canvas.getContext('2d').drawImage(localVideo, 0, 0, 640, 480);
-            
-            const link = document.createElement('a');
-            link.download = 'foto-' + Date.now() + '.jpg';
-            link.href = canvas.toDataURL('image/jpeg', 0.9);
-            link.click();
-        };
-        
         // ========== INICIALIZAÇÃO ==========
         window.addEventListener('load', () => {
             console.log('📱 Página carregada, detectando dispositivo...');
             configurarPorDispositivo();
         });
-        
-        // Expõe função de foto globalmente
-        window.tirarFoto = tirarFoto;
     </script>
 </body>
 </html>
