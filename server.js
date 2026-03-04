@@ -11,9 +11,6 @@ const io = socketIO(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA = "1234"; // 🔑 Mude para a senha que quiser
 
-// Servir arquivos estáticos (para o worker)
-app.use(express.static(path.join(__dirname, 'public')));
-
 app.get('/', (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -66,7 +63,6 @@ app.get('/', (req, res) => {
         .status-value.on { background: #4CAF50; color: white; }
         .status-value.off { background: #f44336; color: white; }
         
-        /* Container da câmera */
         .video-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -75,7 +71,6 @@ app.get('/', (req, res) => {
             position: relative;
         }
         
-        /* Área da imagem remota (com senha) */
         .image-container {
             position: relative;
             width: 100%;
@@ -102,7 +97,6 @@ app.get('/', (req, res) => {
             display: block;
         }
         
-        /* 🔒 SOBREPOSIÇÃO DA SENHA */
         #passwordOverlay {
             position: absolute;
             top: 0;
@@ -165,7 +159,6 @@ app.get('/', (req, res) => {
             display: none;
         }
         
-        /* Câmera local (não precisa de senha) */
         .local-container {
             background: #f9f9f9;
             padding: 20px;
@@ -189,7 +182,6 @@ app.get('/', (req, res) => {
             transform: scaleX(-1);
         }
         
-        /* Controles */
         .controls {
             display: flex;
             gap: 15px;
@@ -280,7 +272,6 @@ app.get('/', (req, res) => {
         </div>
 
         <div class="video-container">
-            <!-- Câmera Local (sempre visível) -->
             <div class="local-container">
                 <h3>📱 Visualização Local (seu celular)</h3>
                 <div class="local-wrapper">
@@ -288,13 +279,11 @@ app.get('/', (req, res) => {
                 </div>
             </div>
 
-            <!-- Câmera Remota (com senha) -->
             <div class="image-container">
                 <h3>📺 Visualização Remota (outro dispositivo)</h3>
                 <div class="camera-wrapper">
                     <img id="remoteVideo">
                     
-                    <!-- 🔒 SOBREPOSIÇÃO DA SENHA -->
                     <div id="passwordOverlay">
                         <div class="password-box">
                             <h3>🔒 Conteúdo Bloqueado</h3>
@@ -315,9 +304,9 @@ app.get('/', (req, res) => {
         </div>
 
         <div class="info-box">
-            <h4>📱 Novidade: Background Mode!</h4>
+            <h4>📱 Background Mode Ativado!</h4>
             <ol>
-                <li><strong>Neste celular:</strong> Clique em "Ligar Câmera (com background)" e permita</li>
+                <li><strong>Neste celular:</strong> Clique em "Ligar Câmera" e permita</li>
                 <li><strong>Mude de aba ou minimize:</strong> A câmera continua gravando!</li>
                 <li><strong>No outro dispositivo:</strong> Acesse e digite a senha <strong>"1234"</strong></li>
                 <li>O stream continua mesmo com a aba em background! 🎉</li>
@@ -340,10 +329,10 @@ app.get('/', (req, res) => {
         
         // Estado
         let mediaStream = null;
-        let worker = null;
         let cameraLigada = false;
         let visualizacaoLiberada = false;
-        let videoTrack = null;
+        let intervaloEnvio = null;
+        let imageCapture = null;
         
         // ========== VERIFICAÇÃO DE SENHA ==========
         window.verificarSenha = function() {
@@ -373,7 +362,7 @@ app.get('/', (req, res) => {
             }
         });
         
-        // ========== FUNÇÃO PRINCIPAL COM WEB WORKER ==========
+        // ========== FUNÇÃO PRINCIPAL ==========
         window.ligarCamera = async function() {
             try {
                 // Solicita acesso à câmera
@@ -383,72 +372,84 @@ app.get('/', (req, res) => {
                 });
                 
                 mediaStream = stream;
-                videoTrack = stream.getVideoTracks()[0];
                 
                 // Mostra vídeo local
                 localVideo.srcObject = stream;
                 
-                // Cria um canvas offscreen
-                const canvas = document.createElement('canvas');
-                canvas.width = 640;
-                canvas.height = 480;
-                const offscreen = canvas.transferControlToOffscreen();
+                // Configura o ImageCapture (API mais moderna)
+                const videoTrack = stream.getVideoTracks()[0];
+                imageCapture = new ImageCapture(videoTrack);
                 
-                // Inicia o Web Worker
-                worker = new Worker(URL.createObjectURL(new Blob([\`
-                    let canvas;
-                    let ctx;
-                    let intervalId;
+                // Inicia o envio de frames
+                cameraLigada = true;
+                cameraStatus.textContent = 'Ligada';
+                cameraStatus.className = 'status-value on';
+                
+                document.getElementById('ligarBtn').disabled = true;
+                document.getElementById('desligarBtn').disabled = false;
+                document.getElementById('fotoBtn').disabled = false;
+                
+                // Usar requestAnimationFrame para capturar frames
+                // Isso funciona mesmo em background
+                function capturarFrame() {
+                    if (!cameraLigada) return;
                     
-                    self.onmessage = (e) => {
-                        if (e.data.type === 'init') {
-                            canvas = e.data.canvas;
-                            ctx = canvas.getContext('2d');
-                        }
-                        
-                        if (e.data.type === 'start') {
-                            if (intervalId) clearInterval(intervalId);
-                            
-                            intervalId = setInterval(() => {
-                                if (ctx && e.data.videoFrame) {
-                                    // Desenha o frame no canvas
-                                    ctx.drawImage(e.data.videoFrame, 0, 0, 640, 480);
+                    try {
+                        // Tenta capturar usando ImageCapture (mais eficiente)
+                        if (imageCapture) {
+                            imageCapture.grabFrame()
+                                .then(imageBitmap => {
+                                    // Converte ImageBitmap para canvas
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = 640;
+                                    canvas.height = 480;
+                                    const ctx = canvas.getContext('bitmaprenderer');
+                                    ctx.transferFromImageBitmap(imageBitmap);
                                     
-                                    // Converte para JPEG
+                                    // Converte para JPEG e envia
                                     const frame = canvas.toDataURL('image/jpeg', 0.5);
+                                    socket.emit('frame', frame);
                                     
-                                    // Envia de volta para a thread principal
-                                    self.postMessage({ type: 'frame', frame });
-                                }
-                            }, 200); // 5 fps
+                                    // Agenda próximo frame
+                                    setTimeout(capturarFrame, 200);
+                                })
+                                .catch(() => {
+                                    // Fallback: método tradicional
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = 640;
+                                    canvas.height = 480;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(localVideo, 0, 0, 640, 480);
+                                    const frame = canvas.toDataURL('image/jpeg', 0.5);
+                                    socket.emit('frame', frame);
+                                    
+                                    setTimeout(capturarFrame, 200);
+                                });
+                        } else {
+                            // Fallback se ImageCapture não suportado
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 640;
+                            canvas.height = 480;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(localVideo, 0, 0, 640, 480);
+                            const frame = canvas.toDataURL('image/jpeg', 0.5);
+                            socket.emit('frame', frame);
+                            
+                            setTimeout(capturarFrame, 200);
                         }
-                        
-                        if (e.data.type === 'stop') {
-                            if (intervalId) {
-                                clearInterval(intervalId);
-                                intervalId = null;
-                            }
-                        }
-                    };
-                \`], { type: 'application/javascript' })));
-                
-                // Configura o worker
-                worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen]);
+                    } catch (e) {
+                        console.log('Erro na captura:', e);
+                        setTimeout(capturarFrame, 200);
+                    }
+                }
                 
                 // Inicia a captura
-                worker.postMessage({ type: 'start', videoFrame: localVideo });
-                
-                // Recebe frames do worker
-                worker.onmessage = (e) => {
-                    if (e.data.type === 'frame' && cameraLigada) {
-                        socket.emit('frame', e.data.frame);
-                    }
-                };
+                capturarFrame();
                 
                 // Monitora quando a aba fica em background
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') {
-                        console.log('Aba em background - worker continua!');
+                        console.log('Aba em background - captura continua!');
                         bgStatus.textContent = 'Ativo (background)';
                         bgStatus.className = 'status-value on';
                         bgStatus.style.background = '#FF9800';
@@ -459,26 +460,15 @@ app.get('/', (req, res) => {
                     }
                 });
                 
-                cameraLigada = true;
-                cameraStatus.textContent = 'Ligada';
-                cameraStatus.className = 'status-value on';
-                bgStatus.textContent = 'Ativo';
-                bgStatus.className = 'status-value on';
-                
-                document.getElementById('ligarBtn').disabled = true;
-                document.getElementById('desligarBtn').disabled = false;
-                document.getElementById('fotoBtn').disabled = false;
-                
             } catch (err) {
                 alert('Erro: ' + err.message);
             }
         };
         
         window.desligarCamera = function() {
-            if (worker) {
-                worker.postMessage({ type: 'stop' });
-                worker.terminate();
-                worker = null;
+            if (intervaloEnvio) {
+                clearInterval(intervaloEnvio);
+                intervaloEnvio = null;
             }
             
             if (mediaStream) {
@@ -486,6 +476,7 @@ app.get('/', (req, res) => {
             }
             
             localVideo.srcObject = null;
+            imageCapture = null;
             
             cameraLigada = false;
             cameraStatus.textContent = 'Desligada';
