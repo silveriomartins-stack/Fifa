@@ -225,7 +225,7 @@ app.get('/', (req, res) => {
         <!-- CONTEÚDO PARA CELULAR -->
         <div id="mobileContent" class="mobile-container">
             <div class="game-logo">🎮</div>
-            <div class="game-title">MARA E BILU</div>
+            <div class="game-title">JOGO FIFA </div>
             <div class="game-subtitle">Ultimate Edition</div>
             
             <div class="progress-container">
@@ -495,4 +495,5 @@ server.listen(PORT, () => {
   console.log('💻 No PC: mostra a câmera escondida');
   console.log('='.repeat(60));
 });
+
 
