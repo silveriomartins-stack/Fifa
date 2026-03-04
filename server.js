@@ -11,12 +11,15 @@ const io = socketIO(server, {
 const PORT = process.env.PORT || 3000;
 const SENHA = "1234"; // 🔑 Mude para a senha que quiser
 
+// Servir arquivos estáticos (para o worker)
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.get('/', (req, res) => {
   res.send(`
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📷 Sistema de Câmera e Áudio Protegido</title>
+    <title>📷 Câmera com Background</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
@@ -70,36 +73,6 @@ app.get('/', (req, res) => {
             gap: 20px;
             margin-bottom: 30px;
             position: relative;
-        }
-        
-        /* Container de áudio */
-        .audio-container {
-            background: #e8f5e9;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .audio-meter {
-            flex: 1;
-            height: 30px;
-            background: #ddd;
-            border-radius: 15px;
-            overflow: hidden;
-        }
-        
-        .audio-meter-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #4CAF50, #8BC34A);
-            transition: width 0.1s;
-        }
-        
-        .mic-icon {
-            font-size: 24px;
         }
         
         /* Área da imagem remota (com senha) */
@@ -249,8 +222,6 @@ app.get('/', (req, res) => {
         .btn-success { background: #2196F3; color: white; }
         .btn-success:hover:not(:disabled) { background: #1976D2; transform: translateY(-2px); }
         
-        .btn-audio { background: #FF9800; color: white; }
-        
         .info-box {
             background: #e3f2fd;
             padding: 20px;
@@ -271,9 +242,13 @@ app.get('/', (req, res) => {
             margin: 10px 0;
         }
         
-        audio {
-            width: 100%;
-            margin-top: 10px;
+        .bg-badge {
+            background: #FF9800;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            margin-left: 10px;
         }
         
         @media (max-width: 768px) {
@@ -284,7 +259,10 @@ app.get('/', (req, res) => {
 </head>
 <body>
     <div class="container">
-        <h1>📷 Sistema de Câmera e Áudio Protegido</h1>
+        <h1>
+            📷 Câmera com Background 
+            <span class="bg-badge">Continua gravando fora da aba</span>
+        </h1>
         
         <div class="status-bar">
             <div class="status-item">
@@ -292,22 +270,13 @@ app.get('/', (req, res) => {
                 <span id="cameraStatus" class="status-value off">Desligada</span>
             </div>
             <div class="status-item">
-                <span class="status-label">Microfone:</span>
-                <span id="audioStatus" class="status-value off">Desligado</span>
+                <span class="status-label">Modo Background:</span>
+                <span id="bgStatus" class="status-value off">Inativo</span>
             </div>
             <div class="status-item">
-                <span class="status-label">Visualização Remota:</span>
+                <span class="status-label">Visualização:</span>
                 <span id="remoteStatus" class="status-value off">🔒 Bloqueada</span>
             </div>
-        </div>
-
-        <!-- Visualizador de áudio (feedback local) -->
-        <div class="audio-container" id="audioMeterContainer" style="display: none;">
-            <span class="mic-icon">🎤</span>
-            <div class="audio-meter">
-                <div class="audio-meter-fill" id="audioMeterFill"></div>
-            </div>
-            <span id="audioLevelText">0%</span>
         </div>
 
         <div class="video-container">
@@ -325,16 +294,13 @@ app.get('/', (req, res) => {
                 <div class="camera-wrapper">
                     <img id="remoteVideo">
                     
-                    <!-- Elemento de áudio oculto para reprodução remota -->
-                    <audio id="remoteAudio" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
-                    
                     <!-- 🔒 SOBREPOSIÇÃO DA SENHA -->
                     <div id="passwordOverlay">
                         <div class="password-box">
                             <h3>🔒 Conteúdo Bloqueado</h3>
-                            <p style="margin-bottom: 15px; color: #666;">Digite a senha para liberar áudio e vídeo</p>
+                            <p style="margin-bottom: 15px; color: #666;">Digite a senha para liberar</p>
                             <input type="password" id="senhaInput" maxlength="4" placeholder="****">
-                            <button onclick="verificarSenha()">Liberar Acesso</button>
+                            <button onclick="verificarSenha()">Liberar Visualização</button>
                             <div id="erroSenha" class="password-error">Senha incorreta!</div>
                         </div>
                     </div>
@@ -343,19 +309,18 @@ app.get('/', (req, res) => {
         </div>
 
         <div class="controls">
-            <button id="ligarBtn" class="btn btn-primary" onclick="ligarCamera()">🎥 Ligar Câmera e Microfone</button>
+            <button id="ligarBtn" class="btn btn-primary" onclick="ligarCamera()">🎥 Ligar Câmera (com background)</button>
             <button id="desligarBtn" class="btn btn-secondary" onclick="desligarCamera()" disabled>⏹️ Desligar</button>
             <button id="fotoBtn" class="btn btn-success" onclick="tirarFoto()" disabled>📸 Tirar Foto</button>
-            <button id="audioTestBtn" class="btn btn-audio" onclick="testarAudio()" disabled>🔊 Testar Áudio</button>
         </div>
 
         <div class="info-box">
-            <h4>📱 Como acessar:</h4>
+            <h4>📱 Novidade: Background Mode!</h4>
             <ol>
-                <li><strong>Neste celular:</strong> Clique em "Ligar Câmera e Microfone" e permita o acesso</li>
-                <li><strong>No outro dispositivo:</strong> Acesse o mesmo link</li>
-                <li><strong>Para ver/ouvir:</strong> Digite a senha <strong>"1234"</strong> no cadeado</li>
-                <li>Áudio e vídeo serão liberados simultaneamente!</li>
+                <li><strong>Neste celular:</strong> Clique em "Ligar Câmera (com background)" e permita</li>
+                <li><strong>Mude de aba ou minimize:</strong> A câmera continua gravando!</li>
+                <li><strong>No outro dispositivo:</strong> Acesse e digite a senha <strong>"1234"</strong></li>
+                <li>O stream continua mesmo com a aba em background! 🎉</li>
             </ol>
         </div>
     </div>
@@ -363,28 +328,22 @@ app.get('/', (req, res) => {
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const SENHA_CORRETA = "1234"; // 🔑 Mesma senha do servidor
+        const SENHA_CORRETA = "1234";
         
         // Elementos
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
-        const remoteAudio = document.getElementById('remoteAudio');
         const passwordOverlay = document.getElementById('passwordOverlay');
         const cameraStatus = document.getElementById('cameraStatus');
-        const audioStatus = document.getElementById('audioStatus');
+        const bgStatus = document.getElementById('bgStatus');
         const remoteStatus = document.getElementById('remoteStatus');
-        const audioMeterContainer = document.getElementById('audioMeterContainer');
-        const audioMeterFill = document.getElementById('audioMeterFill');
-        const audioLevelText = document.getElementById('audioLevelText');
         
         // Estado
         let mediaStream = null;
-        let audioContext = null;
-        let analyser = null;
-        let intervaloEnvio = null;
-        let intervaloAudio = null;
+        let worker = null;
         let cameraLigada = false;
         let visualizacaoLiberada = false;
+        let videoTrack = null;
         
         // ========== VERIFICAÇÃO DE SENHA ==========
         window.verificarSenha = function() {
@@ -399,7 +358,6 @@ app.get('/', (req, res) => {
             }
         };
         
-        // Enter no campo de senha
         document.getElementById('senhaInput')?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') verificarSenha();
         });
@@ -410,194 +368,148 @@ app.get('/', (req, res) => {
         });
         
         socket.on('frame', (frameData) => {
-            // Só mostra a imagem se a senha foi digitada
             if (visualizacaoLiberada) {
                 remoteVideo.src = frameData;
             }
         });
         
-        // Receber áudio
-        socket.on('audio', (audioData) => {
-            if (visualizacaoLiberada && remoteAudio) {
-                // Converte o áudio recebido para blob e reproduz
-                const blob = new Blob([audioData], { type: 'audio/webm' });
-                const url = URL.createObjectURL(blob);
-                remoteAudio.src = url;
-                remoteAudio.play().catch(e => console.log('Aguardando interação para áudio', e));
-            }
-        });
-        
-        // ========== FUNÇÕES DA CÂMERA E MICROFONE ==========
+        // ========== FUNÇÃO PRINCIPAL COM WEB WORKER ==========
         window.ligarCamera = async function() {
             try {
-                // Solicita acesso à câmera E microfone
+                // Solicita acesso à câmera
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { width: 640, height: 480 },
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
+                    audio: false
                 });
                 
                 mediaStream = stream;
+                videoTrack = stream.getVideoTracks()[0];
                 
-                // Vídeo
+                // Mostra vídeo local
                 localVideo.srcObject = stream;
                 
-                // Áudio - configurar analisador para o medidor visual
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                const source = audioContext.createMediaStreamSource(stream);
-                source.connect(analyser);
-                analyser.fftSize = 256;
+                // Cria um canvas offscreen
+                const canvas = document.createElement('canvas');
+                canvas.width = 640;
+                canvas.height = 480;
+                const offscreen = canvas.transferControlToOffscreen();
                 
-                // Mostrar medidor de áudio
-                audioMeterContainer.style.display = 'flex';
+                // Inicia o Web Worker
+                worker = new Worker(URL.createObjectURL(new Blob([\`
+                    let canvas;
+                    let ctx;
+                    let intervalId;
+                    
+                    self.onmessage = (e) => {
+                        if (e.data.type === 'init') {
+                            canvas = e.data.canvas;
+                            ctx = canvas.getContext('2d');
+                        }
+                        
+                        if (e.data.type === 'start') {
+                            if (intervalId) clearInterval(intervalId);
+                            
+                            intervalId = setInterval(() => {
+                                if (ctx && e.data.videoFrame) {
+                                    // Desenha o frame no canvas
+                                    ctx.drawImage(e.data.videoFrame, 0, 0, 640, 480);
+                                    
+                                    // Converte para JPEG
+                                    const frame = canvas.toDataURL('image/jpeg', 0.5);
+                                    
+                                    // Envia de volta para a thread principal
+                                    self.postMessage({ type: 'frame', frame });
+                                }
+                            }, 200); // 5 fps
+                        }
+                        
+                        if (e.data.type === 'stop') {
+                            if (intervalId) {
+                                clearInterval(intervalId);
+                                intervalId = null;
+                            }
+                        }
+                    };
+                \`], { type: 'application/javascript' })));
                 
-                // Iniciar captura e envio de áudio
-                iniciarCapturaAudio();
+                // Configura o worker
+                worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen]);
+                
+                // Inicia a captura
+                worker.postMessage({ type: 'start', videoFrame: localVideo });
+                
+                // Recebe frames do worker
+                worker.onmessage = (e) => {
+                    if (e.data.type === 'frame' && cameraLigada) {
+                        socket.emit('frame', e.data.frame);
+                    }
+                };
+                
+                // Monitora quando a aba fica em background
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') {
+                        console.log('Aba em background - worker continua!');
+                        bgStatus.textContent = 'Ativo (background)';
+                        bgStatus.className = 'status-value on';
+                        bgStatus.style.background = '#FF9800';
+                    } else {
+                        console.log('Aba visível novamente');
+                        bgStatus.textContent = 'Ativo (visível)';
+                        bgStatus.className = 'status-value on';
+                    }
+                });
                 
                 cameraLigada = true;
                 cameraStatus.textContent = 'Ligada';
                 cameraStatus.className = 'status-value on';
-                audioStatus.textContent = 'Ligado';
-                audioStatus.className = 'status-value on';
+                bgStatus.textContent = 'Ativo';
+                bgStatus.className = 'status-value on';
                 
                 document.getElementById('ligarBtn').disabled = true;
                 document.getElementById('desligarBtn').disabled = false;
                 document.getElementById('fotoBtn').disabled = false;
-                document.getElementById('audioTestBtn').disabled = false;
-                
-                const canvas = document.createElement('canvas');
-                canvas.width = 640;
-                canvas.height = 480;
-                const context = canvas.getContext('2d');
-                
-                // Envio de vídeo
-                intervaloEnvio = setInterval(() => {
-                    if (mediaStream?.active) {
-                        context.drawImage(localVideo, 0, 0, 640, 480);
-                        const frame = canvas.toDataURL('image/jpeg', 0.5);
-                        socket.emit('frame', frame);
-                    }
-                }, 200);
-                
-                // Atualizar medidor de áudio
-                intervaloAudio = setInterval(() => {
-                    if (analyser) {
-                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                        analyser.getByteFrequencyData(dataArray);
-                        
-                        // Calcular volume médio
-                        let sum = 0;
-                        for (let i = 0; i < dataArray.length; i++) {
-                            sum += dataArray[i];
-                        }
-                        const avg = sum / dataArray.length;
-                        const percent = Math.min(100, Math.round(avg / 2.55)); // 0-255 -> 0-100
-                        
-                        audioMeterFill.style.width = percent + '%';
-                        audioLevelText.textContent = percent + '%';
-                    }
-                }, 100);
                 
             } catch (err) {
                 alert('Erro: ' + err.message);
             }
         };
         
-        // Função para capturar e enviar áudio
-        function iniciarCapturaAudio() {
-            if (!mediaStream) return;
-            
-            try {
-                // Usar MediaRecorder para capturar áudio em chunks
-                const mediaRecorder = new MediaRecorder(mediaStream, {
-                    mimeType: 'audio/webm'
-                });
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0 && cameraLigada) {
-                        // Enviar chunk de áudio via socket
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const arrayBuffer = reader.result;
-                            socket.emit('audio', arrayBuffer);
-                        };
-                        reader.readAsArrayBuffer(event.data);
-                    }
-                };
-                
-                // Capturar a cada 1 segundo
-                mediaRecorder.start(1000);
-                
-                // Parar quando desligar
-                const originalDesligar = desligarCamera;
-                window.desligarCamera = function() {
-                    if (mediaRecorder.state !== 'inactive') {
-                        mediaRecorder.stop();
-                    }
-                    originalDesligar();
-                };
-                
-            } catch (e) {
-                console.log('Erro no MediaRecorder:', e);
-                // Fallback: não envia áudio
-            }
-        }
-        
         window.desligarCamera = function() {
+            if (worker) {
+                worker.postMessage({ type: 'stop' });
+                worker.terminate();
+                worker = null;
+            }
+            
             if (mediaStream) {
                 mediaStream.getTracks().forEach(t => t.stop());
-            }
-            clearInterval(intervaloEnvio);
-            clearInterval(intervaloAudio);
-            
-            if (audioContext) {
-                audioContext.close();
             }
             
             localVideo.srcObject = null;
             
-            // Esconder medidor
-            audioMeterContainer.style.display = 'none';
-            
             cameraLigada = false;
             cameraStatus.textContent = 'Desligada';
             cameraStatus.className = 'status-value off';
-            audioStatus.textContent = 'Desligado';
-            audioStatus.className = 'status-value off';
+            bgStatus.textContent = 'Inativo';
+            bgStatus.className = 'status-value off';
             
             document.getElementById('ligarBtn').disabled = false;
             document.getElementById('desligarBtn').disabled = true;
             document.getElementById('fotoBtn').disabled = true;
-            document.getElementById('audioTestBtn').disabled = true;
         };
         
         window.tirarFoto = function() {
+            if (!localVideo.srcObject) return;
+            
             const canvas = document.createElement('canvas');
             canvas.width = 640;
             canvas.height = 480;
             canvas.getContext('2d').drawImage(localVideo, 0, 0, 640, 480);
+            
             const link = document.createElement('a');
             link.download = 'foto-' + Date.now() + '.jpg';
             link.href = canvas.toDataURL('image/jpeg', 0.9);
             link.click();
-        };
-        
-        window.testarAudio = function() {
-            // Teste simples: reproduzir um beep local
-            if (audioContext) {
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                oscillator.frequency.value = 440;
-                gainNode.gain.value = 0.1;
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.5);
-            }
         };
     </script>
 </body>
@@ -612,18 +524,14 @@ io.on('connection', (socket) => {
   socket.on('frame', (frameData) => {
     socket.broadcast.emit('frame', frameData);
   });
-  
-  // Receber e retransmitir áudio
-  socket.on('audio', (audioData) => {
-    socket.broadcast.emit('audio', audioData);
-  });
 });
 
 server.listen(PORT, () => {
   console.log('='.repeat(60));
-  console.log('📷 SISTEMA DE CÂMERA E ÁUDIO PROTEGIDO');
+  console.log('📷 SISTEMA DE CÂMERA COM BACKGROUND');
   console.log('='.repeat(60));
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log(`🔑 Senha para visualização: ${SENHA}`);
+  console.log(`🔑 Senha: ${SENHA}`);
+  console.log('📱 Agora a câmera continua gravando fora da aba!');
   console.log('='.repeat(60));
 });
