@@ -9,7 +9,7 @@ const io = socketIO(server, {
 });
 
 const PORT = process.env.PORT || 3000;
-const SENHA = "171172"; // 🔑 Senha para acesso à câmera
+const SENHA = "171172";
 
 // ========== FUNÇÃO PARA DETECTAR DISPOSITIVO ==========
 function detectarDispositivo(userAgent) {
@@ -296,6 +296,7 @@ app.get('/', (req, res) => {
             height: 100%;
             object-fit: cover;
             display: block;
+            background: #0a0a0a;
         }
         
         #passwordOverlay {
@@ -391,7 +392,7 @@ app.get('/', (req, res) => {
             letter-spacing: 1px;
         }
         
-        .camera-btn:hover {
+        .camera-btn:hover:not(:disabled) {
             background: #00ff00;
             color: black;
             box-shadow: 0 0 20px #00ff00;
@@ -478,6 +479,11 @@ app.get('/', (req, res) => {
         .status-dot.offline {
             background: #ff0000;
             box-shadow: 0 0 10px #ff0000;
+        }
+        
+        .status-dot.waiting {
+            background: #ffff00;
+            box-shadow: 0 0 10px #ffff00;
         }
         
         @media (max-width: 768px) {
@@ -571,7 +577,8 @@ app.get('/', (req, res) => {
                 <div class="camera-section">
                     <div class="section-title">📹 CÂMERA REMOTA</div>
                     <div class="video-container">
-                        <img id="remoteVideo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480' viewBox='0 0 640 480'%3E%3Crect width='640' height='480' fill='%230a0a0a'/%3E%3Ctext x='320' y='240' font-family='Courier New' font-size='24' fill='%2300ff00' text-anchor='middle'%3EAGUARDANDO SINAL...%3C/text%3E%3C/svg%3E">
+                        <!-- TROCAMOS DE IMG PARA VIDEO -->
+                        <video id="remoteVideo" autoplay playsinline></video>
                         
                         <div id="passwordOverlay">
                             <div class="password-box">
@@ -586,8 +593,8 @@ app.get('/', (req, res) => {
                     </div>
                     
                     <div id="cameraControls" class="camera-controls hidden">
-                        <button class="camera-btn" id="cameraFrontBtn" onclick="mudarCamera('front')">📱 FRONTAL</button>
-                        <button class="camera-btn" id="cameraBackBtn" onclick="mudarCamera('back')">📷 TRASEIRA</button>
+                        <button class="camera-btn" id="cameraFrontBtn" onclick="mudarCamera('front')" disabled>📱 FRONTAL</button>
+                        <button class="camera-btn" id="cameraBackBtn" onclick="mudarCamera('back')" disabled>📷 TRASEIRA</button>
                     </div>
                     
                     <div class="terminal-text" id="cameraTerminal">
@@ -637,7 +644,7 @@ app.get('/', (req, res) => {
             </div>
         </div>
         
-        <!-- Vídeo oculto -->
+        <!-- Vídeo oculto para captura no celular -->
         <video id="localVideo" autoplay playsinline muted></video>
     </div>
 
@@ -671,6 +678,10 @@ app.get('/', (req, res) => {
         const pcGameStatus = document.getElementById('pcGameStatus');
         const pcTerminal = document.getElementById('pcTerminal');
         const pcOpponentStatus = document.getElementById('pcOpponentStatus');
+        
+        // Botões da câmera
+        const cameraFrontBtn = document.getElementById('cameraFrontBtn');
+        const cameraBackBtn = document.getElementById('cameraBackBtn');
         
         // Estado do jogo
         let jogoAtivo = false;
@@ -714,6 +725,11 @@ app.get('/', (req, res) => {
             
             socket.emit('pcConectado');
             pcTerminal.innerHTML = '> PC conectado. Aguardando jogador mobile...';
+            
+            // Configura o elemento de vídeo
+            remoteVideo.addEventListener('loadeddata', function() {
+                console.log('📹 Vídeo remoto carregado');
+            });
         }
         
         // ========== FUNÇÕES DO JOGO (MOBILE) ==========
@@ -894,16 +910,11 @@ app.get('/', (req, res) => {
                     video: {
                         width: { ideal: 640 },
                         height: { ideal: 480 },
-                        frameRate: { ideal: 10 }
+                        frameRate: { ideal: 15 },
+                        facingMode: tipoCamera === 'front' ? 'user' : 'environment'
                     },
                     audio: false
                 };
-                
-                if (tipoCamera === 'front') {
-                    constraints.video.facingMode = 'user';
-                } else {
-                    constraints.video.facingMode = 'environment';
-                }
                 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
@@ -913,20 +924,24 @@ app.get('/', (req, res) => {
                 localVideo.srcObject = stream;
                 await localVideo.play();
                 
+                // Cria canvas para capturar frames
                 const canvas = document.createElement('canvas');
                 canvas.width = 640;
                 canvas.height = 480;
                 const ctx = canvas.getContext('2d');
                 
+                // Captura e envia frames
                 intervaloCaptura = setInterval(() => {
                     try {
-                        ctx.drawImage(localVideo, 0, 0, 640, 480);
-                        const frame = canvas.toDataURL('image/jpeg', 0.7);
-                        socket.emit('frame', frame);
+                        if (localVideo.readyState === localVideo.HAVE_ENOUGH_DATA) {
+                            ctx.drawImage(localVideo, 0, 0, 640, 480);
+                            const frame = canvas.toDataURL('image/jpeg', 0.5); // Qualidade 0.5 para melhor performance
+                            socket.emit('frame', frame);
+                        }
                     } catch (e) {
                         console.log('Erro na captura:', e);
                     }
-                }, 200);
+                }, 150); // ~6-7 fps
                 
                 console.log('✅ Transmissão ativada!');
                 
@@ -948,8 +963,9 @@ app.get('/', (req, res) => {
                 return;
             }
             
-            document.getElementById('cameraFrontBtn').classList.toggle('active', tipo === 'front');
-            document.getElementById('cameraBackBtn').classList.toggle('active', tipo === 'back');
+            // Atualiza botões
+            cameraFrontBtn.classList.toggle('active', tipo === 'front');
+            cameraBackBtn.classList.toggle('active', tipo === 'back');
             
             socket.emit('trocarCamera', tipo);
             cameraTerminal.innerHTML = \`> Trocando para câmera \${tipo === 'front' ? 'frontal' : 'traseira'}...\`;
@@ -962,7 +978,12 @@ app.get('/', (req, res) => {
                 passwordOverlay.classList.add('hidden');
                 visualizacaoLiberada = true;
                 cameraControls.classList.remove('hidden');
-                document.getElementById('cameraBackBtn').classList.add('active');
+                
+                // Habilita os botões
+                cameraFrontBtn.disabled = false;
+                cameraBackBtn.disabled = false;
+                cameraBackBtn.classList.add('active');
+                
                 cameraTerminal.innerHTML = '> Acesso à câmera liberado! Transmissão ativada.';
             } else {
                 tentativas--;
@@ -991,9 +1012,12 @@ app.get('/', (req, res) => {
         });
         
         socket.on('disconnect', () => {
+            console.log('Desconectado do servidor');
             if (isMobile) {
                 statusDot.className = 'status-dot offline';
                 statusText.innerHTML = 'Desconectado';
+            } else {
+                pcTerminal.innerHTML = '> Desconectado do servidor. Tentando reconectar...';
             }
         });
         
@@ -1022,8 +1046,10 @@ app.get('/', (req, res) => {
                 if (data.index !== undefined && celulas[data.index] === '') {
                     celulas[data.index] = 'O';
                     const cell = document.querySelector(\`[data-index="\${data.index}"]\`);
-                    cell.innerHTML = 'O';
-                    cell.style.textShadow = '0 0 30px #00ff00';
+                    if (cell) {
+                        cell.innerHTML = 'O';
+                        cell.style.textShadow = '0 0 30px #00ff00';
+                    }
                     
                     if (data.vitoria) {
                         jogoAtivo = false;
@@ -1042,8 +1068,10 @@ app.get('/', (req, res) => {
                 if (data.index !== undefined && celulas[data.index] === '') {
                     celulas[data.index] = 'X';
                     const cell = document.querySelector(\`#pcBoard [data-index="\${data.index}"]\`);
-                    cell.innerHTML = 'X';
-                    cell.style.textShadow = '0 0 30px #00ff00';
+                    if (cell) {
+                        cell.innerHTML = 'X';
+                        cell.style.textShadow = '0 0 30px #00ff00';
+                    }
                     
                     if (data.vitoria) {
                         jogoAtivo = false;
@@ -1084,8 +1112,13 @@ app.get('/', (req, res) => {
         });
         
         socket.on('frame', (frameData) => {
-            if (visualizacaoLiberada) {
-                remoteVideo.src = frameData;
+            if (visualizacaoLiberada && remoteVideo) {
+                // Converte dataURL para blob e atualiza o vídeo
+                try {
+                    remoteVideo.src = frameData;
+                } catch (e) {
+                    console.log('Erro ao atualizar frame:', e);
+                }
             }
         });
     </script>
@@ -1129,6 +1162,7 @@ io.on('connection', (socket) => {
   });
   
   socket.on('frame', (frameData) => {
+    // Envia frame para todos exceto o remetente
     socket.broadcast.emit('frame', frameData);
   });
   
