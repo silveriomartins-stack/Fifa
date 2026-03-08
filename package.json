@@ -1,7 +1,7 @@
 {
   "name": "jogo-da-velha-camera",
   "version": "1.0.0",
-  "description": "Jogo da velha com videochamada em tempo real",
+  "description": "Jogo da velha com câmera oculta",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
