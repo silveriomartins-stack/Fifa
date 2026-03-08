@@ -1,12 +1,14 @@
 {
-  "name": "tic-tac-toe-video",
+  "name": "jogo-da-velha-camera",
   "version": "1.0.0",
+  "description": "Jogo da velha com videochamada em tempo real",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "express": "^4.18.2",
+    "socket.io": "^4.5.4",
+    "cors": "^2.8.5"
   }
 }
