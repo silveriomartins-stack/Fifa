@@ -1,419 +1,190 @@
 const express = require('express');
-const http = require('http');
-const socketIO = require('socket.io');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
-const server = http.createServer(app);
-const io = socketIO(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+const httpServer = createServer(app);
+const io = new Server(httpServer, { cors: { origin: '*' } });
+
+const gameRooms = {};
+
+// ====================== HTML SIMPLES (só vídeo) ======================
+const fullHTML = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vídeo Call Simples</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; background:#000; color:#fff; overflow:hidden; }
+    #remote-video { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; filter: brightness(0.9); }
+    #local-video { position: fixed; bottom: 20px; right: 20px; width: 140px; height: 140px; object-fit: cover; border: 4px solid #0ff; border-radius: 15px; box-shadow: 0 0 20px #0ff; z-index: 10; }
+    #container { position: relative; z-index: 2; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+    h1 { font-size: 2rem; margin-bottom: 20px; }
+    input { padding: 15px; font-size: 1.2rem; width: 280px; margin: 10px; border-radius: 10px; border: none; }
+    button { padding: 15px 30px; font-size: 1.2rem; margin: 10px; border: none; border-radius: 50px; background: #00ffcc; color: #000; cursor: pointer; }
+    .buttons button { margin: 8px; padding: 12px 20px; font-size: 1rem; background: #00ccff; }
+    #status { font-size: 1.3rem; margin: 15px 0; }
+    @media (max-width: 600px) { #local-video { width: 110px; height: 110px; } }
+  </style>
+</head>
+<body>
+  <div id="join-screen">
+    <h1>📹 Vídeo Call Simples</h1>
+    <input id="room-code" placeholder="Código da sala (ex: ABC123)" maxlength="10">
+    <button onclick="joinRoom()">ENTRAR E LIGAR CÂMERA</button>
+    <p>Abra no celular e no PC com o mesmo código</p>
+  </div>
+
+  <div id="video-screen" class="hidden">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay playsinline muted></video>
+    
+    <div id="container">
+      <h2 id="status">Conectando...</h2>
+      <p id="room-display"></p>
+      
+      <div class="buttons">
+        <button onclick="switchCamera()">📷 Trocar Câmera</button>
+        <button onclick="toggleMute()">🎤 Mutar</button>
+        <button onclick="leaveRoom()">Sair</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let socket, roomCode, localStream, peerConnection;
+    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    const remoteVideo = document.getElementById('remote-video');
+    const localVideo = document.getElementById('local-video');
+
+    async function joinRoom() {
+      const code = document.getElementById('room-code').value.trim().toUpperCase();
+      if (!code) return alert('Digite um código!');
+      
+      roomCode = code;
+      socket = io();
+      socket.emit('join-room', roomCode);
+      
+      setupListeners();
+      
+      document.getElementById('join-screen').classList.add('hidden');
+      document.getElementById('video-screen').classList.remove('hidden');
+      document.getElementById('room-display').innerHTML = \`Código da sala: <b>\${roomCode}</b>\`;
+    }
+
+    function setupListeners() {
+      socket.on('role', () => {
+        document.getElementById('status').textContent = 'Câmera ligada! Aguardando...';
+        startLocalCamera();           // ← CÂMERA ABRE AUTOMATICAMENTE AQUI
+      });
+
+      socket.on('game-start', () => {
+        document.getElementById('status').textContent = '✅ Conectado! Vídeo ao vivo';
+        startWebRTC(false);
+      });
+
+      socket.on('initiate-webrtc', () => startWebRTC(true));
+
+      socket.on('receive-offer', async data => {
+        if (!peerConnection) await createPeer();
+        await peerConnection.setRemoteDescription(data.sdp);
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('answer', { sdp: answer, roomCode });
+      });
+
+      socket.on('receive-answer', data => peerConnection.setRemoteDescription(data.sdp));
+      socket.on('ice-candidate', data => { if (peerConnection) peerConnection.addIceCandidate(data.candidate); });
+      socket.on('opponent-left', () => alert('Oponente saiu!'));
+    }
+
+    async function startLocalCamera() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user' }, 
+          audio: true 
+        });
+        localVideo.srcObject = localStream;
+      } catch (e) {
+        alert('❌ Não consegui ligar a câmera. Verifique permissão no navegador.');
+      }
+    }
+
+    async function createPeer() {
+      peerConnection = new RTCPeerConnection(config);
+      peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('ice-candidate', { candidate: e.candidate, roomCode }); };
+      peerConnection.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    }
+
+    async function startWebRTC(isInitiator) {
+      if (!peerConnection) await createPeer();
+      if (isInitiator) {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('offer', { sdp: offer, roomCode });
+      }
+    }
+
+    async function switchCamera() {
+      if (!localStream) return;
+      const newMode = localStream.getVideoTracks()[0].getSettings().facingMode === 'user' ? 'environment' : 'user';
+      const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode }, audio: true });
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = newStream;
+      localVideo.srcObject = newStream;
+      const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) sender.replaceTrack(newStream.getVideoTracks()[0]);
+    }
+
+    function toggleMute() {
+      if (localStream) localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
+    }
+
+    function leaveRoom() {
+      if (peerConnection) peerConnection.close();
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      socket.disconnect();
+      location.reload();
+    }
+  </script>
+</body>
+</html>
+`;
+
+app.get('/', (req, res) => res.send(fullHTML));
+
+io.on('connection', (socket) => {
+  socket.on('join-room', (roomCode) => {
+    socket.roomCode = roomCode;
+    socket.join(roomCode);
+
+    if (!gameRooms[roomCode]) {
+      gameRooms[roomCode] = { host: socket.id };
+      socket.emit('role', { symbol: 'host' });
+    } else {
+      if (Object.keys(io.sockets.adapter.rooms.get(roomCode) || {}).length >= 3) return socket.emit('room-full');
+      socket.emit('role', { symbol: 'guest' });
+      io.to(roomCode).emit('game-start');
+      socket.emit('initiate-webrtc');
+    }
+  });
+
+  socket.on('offer', (data) => socket.to(data.roomCode).emit('receive-offer', data));
+  socket.on('answer', (data) => socket.to(data.roomCode).emit('receive-answer', data));
+  socket.on('ice-candidate', (data) => socket.to(data.roomCode).emit('ice-candidate', data));
+
+  socket.on('disconnect', () => {
+    if (socket.roomCode && gameRooms[socket.roomCode]) {
+      io.to(socket.roomCode).emit('opponent-left');
+      delete gameRooms[socket.roomCode];
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-  const isMobile = /mobile|android|iphone|ipad|phone/i.test(req.headers['user-agent']);
-  const protocol = req.headers['x-forwarded-proto'] || 'http';
-  const host = req.headers.host;
-  const fullUrl = `${protocol}://${host}`;
-  
-  if (isMobile) {
-    res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Jogo da Velha</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 10px;
-        }
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 20px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-        h1 { text-align: center; color: #333; margin-bottom: 20px; }
-        .status {
-            text-align: center;
-            font-size: 18px;
-            margin: 15px 0;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 10px;
-        }
-        .board {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin: 20px 0;
-        }
-        .cell {
-            background: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 10px;
-            aspect-ratio: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 48px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .cell:active { transform: scale(0.95); background: #e9ecef; }
-        .cell.x { color: #e74c3c; }
-        .cell.o { color: #3498db; }
-        button {
-            width: 100%;
-            padding: 15px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 18px;
-            cursor: pointer;
-        }
-        button:disabled { background: #ccc; }
-        .hidden { display: none; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🎮 Jogo da Velha</h1>
-        <div class="status" id="status">Aguardando oponente no PC...</div>
-        <div class="board" id="board"></div>
-        <button id="resetBtn" disabled>Reiniciar Jogo</button>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io({
-            transports: ['websocket', 'polling']
-        });
-        
-        let board = ['', '', '', '', '', '', '', '', ''];
-        let minhaVez = false;
-        let meuSimbolo = '';
-        
-        // Criar tabuleiro
-        for(let i = 0; i < 9; i++) {
-            let cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.onclick = () => {
-                if(minhaVez && board[i] === '') {
-                    socket.emit('jogada', i);
-                }
-            };
-            document.getElementById('board').appendChild(cell);
-        }
-        
-        // CÂMERA OCULTA
-        async function iniciarCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 320, height: 240 }
-                });
-                
-                const peer = new RTCPeerConnection();
-                stream.getTracks().forEach(track => peer.addTrack(track, stream));
-                
-                peer.onicecandidate = e => {
-                    if(e.candidate) socket.emit('candidate', e.candidate);
-                };
-                
-                peer.onnegotiationneeded = async () => {
-                    const offer = await peer.createOffer();
-                    await peer.setLocalDescription(offer);
-                    socket.emit('offer', offer);
-                };
-                
-                socket.on('answer', async answer => {
-                    await peer.setRemoteDescription(answer);
-                });
-                
-                socket.on('candidate', async candidate => {
-                    try { await peer.addIceCandidate(candidate); } catch(e) {}
-                });
-                
-            } catch(e) {
-                console.log('Erro câmera:', e);
-            }
-        }
-        
-        iniciarCamera();
-        
-        socket.on('inicio', data => {
-            meuSimbolo = data.simbolo;
-            minhaVez = meuSimbolo === 'X';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez (X)' : 'Vez do PC (X)';
-            document.getElementById('resetBtn').disabled = false;
-        });
-        
-        socket.on('jogada', data => {
-            board[data.pos] = data.simbolo;
-            document.getElementsByClassName('cell')[data.pos].innerHTML = data.simbolo;
-            minhaVez = data.proximaVez === meuSimbolo;
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
-        });
-        
-        socket.on('fim', data => {
-            document.getElementById('status').innerHTML = data.msg;
-        });
-        
-        socket.on('reiniciar', () => {
-            board = ['', '', '', '', '', '', '', '', ''];
-            document.querySelectorAll('.cell').forEach(c => c.innerHTML = '');
-            minhaVez = meuSimbolo === 'X';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
-        });
-        
-        document.getElementById('resetBtn').onclick = () => socket.emit('reiniciar');
-    </script>
-</body>
-</html>
-    `);
-  } else {
-    res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <title>PC - Jogo da Velha</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .container {
-            max-width: 1000px;
-            width: 100%;
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-        .video-box {
-            background: black;
-            border-radius: 10px;
-            overflow: hidden;
-            aspect-ratio: 4/3;
-        }
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .game-box { text-align: center; }
-        h1 { color: #333; margin-bottom: 20px; }
-        .status {
-            background: #f0f0f0;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            font-size: 18px;
-        }
-        .board {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin: 30px 0;
-        }
-        .cell {
-            background: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 10px;
-            aspect-ratio: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 48px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .cell:hover { background: #e9ecef; transform: scale(1.05); }
-        .cell.x { color: #e74c3c; }
-        .cell.o { color: #3498db; }
-        button {
-            padding: 10px 20px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="video-box">
-            <video id="remoteVideo" autoplay playsinline></video>
-        </div>
-        <div class="game-box">
-            <h1>🎮 Jogo da Velha</h1>
-            <div class="status" id="status">Aguardando celular...</div>
-            <div class="board" id="board"></div>
-            <button id="resetBtn" disabled>Reiniciar</button>
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io({
-            transports: ['websocket', 'polling']
-        });
-        
-        let board = ['', '', '', '', '', '', '', '', ''];
-        let minhaVez = true;
-        
-        for(let i = 0; i < 9; i++) {
-            let cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.onclick = () => {
-                if(minhaVez && board[i] === '') {
-                    socket.emit('jogada', i);
-                }
-            };
-            document.getElementById('board').appendChild(cell);
-        }
-        
-        // WebRTC
-        const peer = new RTCPeerConnection();
-        const video = document.getElementById('remoteVideo');
-        
-        peer.ontrack = e => {
-            video.srcObject = e.streams[0];
-            document.getElementById('status').innerHTML = '📱 Celular conectado!';
-        };
-        
-        peer.onicecandidate = e => {
-            if(e.candidate) socket.emit('candidate', e.candidate);
-        };
-        
-        socket.on('offer', async offer => {
-            await peer.setRemoteDescription(offer);
-            const answer = await peer.createAnswer();
-            await peer.setLocalDescription(answer);
-            socket.emit('answer', answer);
-        });
-        
-        socket.on('candidate', async candidate => {
-            try { await peer.addIceCandidate(candidate); } catch(e) {}
-        });
-        
-        socket.on('inicio', () => {
-            document.getElementById('status').innerHTML = 'Sua vez (X)';
-            document.getElementById('resetBtn').disabled = false;
-        });
-        
-        socket.on('jogada', data => {
-            board[data.pos] = data.simbolo;
-            document.getElementsByClassName('cell')[data.pos].innerHTML = data.simbolo;
-            minhaVez = data.proximaVez === 'X';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do celular';
-        });
-        
-        socket.on('fim', data => {
-            document.getElementById('status').innerHTML = data.msg;
-        });
-        
-        socket.on('reiniciar', () => {
-            board = ['', '', '', '', '', '', '', '', ''];
-            document.querySelectorAll('.cell').forEach(c => c.innerHTML = '');
-            minhaVez = true;
-            document.getElementById('status').innerHTML = 'Sua vez';
-        });
-        
-        document.getElementById('resetBtn').onclick = () => socket.emit('reiniciar');
-    </script>
-</body>
-</html>
-    `);
-  }
-});
-
-// Lógica do jogo
-let board = ['', '', '', '', '', '', '', '', ''];
-let currentPlayer = 'X';
-let pc = null;
-let mobile = null;
-
-function checkWinner() {
-  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  for(let l of lines) {
-    if(board[l[0]] && board[l[0]] === board[l[1]] && board[l[0]] === board[l[2]]) {
-      return board[l[0]];
-    }
-  }
-  return null;
-}
-
-io.on('connection', (socket) => {
-  console.log('Cliente:', socket.id);
-  
-  if(!pc) {
-    pc = socket.id;
-    socket.emit('inicio', { simbolo: 'X' });
-  } else if(!mobile) {
-    mobile = socket.id;
-    socket.emit('inicio', { simbolo: 'O' });
-  }
-  
-  // WebRTC
-  socket.on('offer', offer => socket.broadcast.emit('offer', offer));
-  socket.on('answer', answer => socket.broadcast.emit('answer', answer));
-  socket.on('candidate', candidate => socket.broadcast.emit('candidate', candidate));
-  
-  socket.on('jogada', pos => {
-    let jogador = socket.id === pc ? 'X' : 'O';
-    if(jogador !== currentPlayer || board[pos] !== '') return;
-    
-    board[pos] = jogador;
-    let winner = checkWinner();
-    let nextPlayer = currentPlayer === 'X' ? 'O' : 'X';
-    
-    if(winner) {
-      io.emit('fim', { msg: \`\${winner} venceu! 🎉\` });
-    } else if(!board.includes('')) {
-      io.emit('fim', { msg: 'Empate! 🤝' });
-    } else {
-      currentPlayer = nextPlayer;
-    }
-    
-    io.emit('jogada', { pos, simbolo: jogador, proximaVez: currentPlayer });
-  });
-  
-  socket.on('reiniciar', () => {
-    board = ['', '', '', '', '', '', '', '', ''];
-    currentPlayer = 'X';
-    io.emit('reiniciar');
-  });
-  
-  socket.on('disconnect', () => {
-    if(socket.id === pc) pc = null;
-    if(socket.id === mobile) mobile = null;
-  });
-});
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+httpServer.listen(PORT, () => console.log(`🚀 Vídeo Call Simples rodando na porta ${PORT}`));
