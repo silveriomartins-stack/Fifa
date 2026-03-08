@@ -1,3 +1,4 @@
+
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
@@ -10,233 +11,145 @@ const io = socketIO(server, {
 
 const PORT = process.env.PORT || 3000;
 
+// Servir arquivos estáticos
+app.use(express.static(path.join(__dirname, 'public')));
+
+// HTML direto na rota principal
 app.get('/', (req, res) => {
-  const isMobile = /mobile|android|iphone|ipad|phone/i.test(req.headers['user-agent']);
-  
-  if (isMobile) {
-    // Página do CELULAR - só vídeo oculto
-    res.send(`
+  res.send(`
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Jogo da Velha</title>
+    <title>Camera Simples</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Arial; text-align: center; padding: 20px; background: #f0f0f0; }
-        .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
-        h1 { color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        button { padding: 15px 30px; font-size: 18px; margin: 10px; border-radius: 5px; border: none; cursor: pointer; }
+        #ligar { background: #4CAF50; color: white; }
+        #desligar { background: #f44336; color: white; }
+        #foto { background: #2196F3; color: white; }
+        video, img { width: 100%; max-width: 640px; border: 2px solid #333; border-radius: 5px; }
         .status { padding: 10px; margin: 10px 0; background: #e3f2fd; border-radius: 5px; }
-        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-        .cell { background: #f8f9fa; border: 2px solid #dee2e6; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; }
-        button { padding: 15px 30px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 5px; width: 100%; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Jogo da Velha</h1>
-        <div class="status" id="status">Aguardando...</div>
-        <div class="board" id="board"></div>
-        <button id="reset">Reiniciar</button>
+        <h1>📷 Câmera Simples</h1>
+        <div class="status" id="status">Status: Desligada</div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <h3>Local (seu celular)</h3>
+                <video id="localVideo" autoplay playsinline muted></video>
+            </div>
+            <div>
+                <h3>Remoto (outro dispositivo)</h3>
+                <img id="remoteVideo">
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <button id="ligar">🎥 Ligar Câmera</button>
+            <button id="desligar" disabled>⏹️ Desligar</button>
+            <button id="foto" disabled>📸 Foto</button>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let board = ['','','','','','','','',''];
-        let minhaVez = false;
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const statusDiv = document.getElementById('status');
+        const ligarBtn = document.getElementById('ligar');
+        const desligarBtn = document.getElementById('desligar');
+        const fotoBtn = document.getElementById('foto');
         
-        // Criar tabuleiro
-        for(let i=0; i<9; i++) {
-            let cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.onclick = () => {
-                if(minhaVez && board[i]==='') socket.emit('jogada', i);
-            };
-            document.getElementById('board').appendChild(cell);
-        }
-        
-        // Vídeo oculto (só imagem, sem áudio)
-        async function iniciarVideo() {
+        let mediaStream = null;
+        let intervaloEnvio = null;
+        let cameraLigada = false;
+
+        socket.on('connect', () => {
+            statusDiv.innerHTML = 'Status: Conectado ao servidor';
+        });
+
+        socket.on('frame', (frameData) => {
+            remoteVideo.src = frameData;
+        });
+
+        ligarBtn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 320, height: 240 } // só vídeo, sem áudio
+                    video: { width: 640, height: 480 } 
                 });
                 
-                const peer = new RTCPeerConnection();
-                stream.getVideoTracks().forEach(track => peer.addTrack(track, stream));
+                mediaStream = stream;
+                localVideo.srcObject = stream;
                 
-                peer.onicecandidate = e => e.candidate && socket.emit('candidate', e.candidate);
-                peer.onnegotiationneeded = async () => {
-                    const offer = await peer.createOffer();
-                    await peer.setLocalDescription(offer);
-                    socket.emit('offer', offer);
-                };
+                cameraLigada = true;
+                statusDiv.innerHTML = 'Status: Câmera ligada - Transmitindo...';
+                ligarBtn.disabled = true;
+                desligarBtn.disabled = false;
+                fotoBtn.disabled = false;
                 
-                socket.on('answer', async a => await peer.setRemoteDescription(a));
-                socket.on('candidate', async c => { try{await peer.addIceCandidate(c)}catch(e){} });
-            } catch(e) { console.log('Erro vídeo:', e); }
-        }
-        iniciarVideo();
-        
-        socket.on('inicio', d => {
-            minhaVez = d.vez === 'O';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
-        });
-        
-        socket.on('jogada', d => {
-            document.getElementsByClassName('cell')[d.pos].innerHTML = d.simbolo;
-            minhaVez = !minhaVez;
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
-        });
-        
-        socket.on('fim', d => document.getElementById('status').innerHTML = d.msg);
-        
-        socket.on('reiniciar', () => {
-            document.querySelectorAll('.cell').forEach(c => c.innerHTML='');
-            minhaVez = false;
-        });
-        
-        document.getElementById('reset').onclick = () => socket.emit('reiniciar');
+                const canvas = document.createElement('canvas');
+                canvas.width = 640;
+                canvas.height = 480;
+                const context = canvas.getContext('2d');
+                
+                intervaloEnvio = setInterval(() => {
+                    if (mediaStream?.active) {
+                        context.drawImage(localVideo, 0, 0, 640, 480);
+                        const frame = canvas.toDataURL('image/jpeg', 0.5);
+                        socket.emit('frame', frame);
+                    }
+                }, 200);
+                
+            } catch (err) {
+                alert('Erro: ' + err.message);
+            }
+        };
+
+        desligarBtn.onclick = () => {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(t => t.stop());
+            }
+            clearInterval(intervaloEnvio);
+            localVideo.srcObject = null;
+            cameraLigada = false;
+            statusDiv.innerHTML = 'Status: Desligada';
+            ligarBtn.disabled = false;
+            desligarBtn.disabled = true;
+            fotoBtn.disabled = true;
+        };
+
+        fotoBtn.onclick = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            canvas.getContext('2d').drawImage(localVideo, 0, 0, 640, 480);
+            const link = document.createElement('a');
+            link.download = 'foto-' + Date.now() + '.jpg';
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
+            link.click();
+        };
     </script>
 </body>
 </html>
-    `);
-  } else {
-    // Página do PC - mostra vídeo + jogo
-    res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-    <title>PC - Jogo da Velha</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
-        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
-        video { width: 100%; background: black; border-radius: 5px; }
-        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-        .cell { background: #f8f9fa; border: 2px solid #dee2e6; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; }
-        button { padding: 10px 20px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div>
-            <video id="video" autoplay playsinline></video>
-        </div>
-        <div>
-            <h1>Jogo da Velha</h1>
-            <div class="status" id="status">Aguardando...</div>
-            <div class="board" id="board"></div>
-            <button id="reset">Reiniciar</button>
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        let board = ['','','','','','','','',''];
-        let minhaVez = true;
-        
-        for(let i=0; i<9; i++) {
-            let cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.onclick = () => {
-                if(minhaVez && board[i]==='') socket.emit('jogada', i);
-            };
-            document.getElementById('board').appendChild(cell);
-        }
-        
-        const peer = new RTCPeerConnection();
-        const video = document.getElementById('video');
-        
-        peer.ontrack = e => video.srcObject = e.streams[0];
-        peer.onicecandidate = e => e.candidate && socket.emit('candidate', e.candidate);
-        
-        socket.on('offer', async o => {
-            await peer.setRemoteDescription(o);
-            const a = await peer.createAnswer();
-            await peer.setLocalDescription(a);
-            socket.emit('answer', a);
-        });
-        
-        socket.on('candidate', async c => { try{await peer.addIceCandidate(c)}catch(e){} });
-        
-        socket.on('inicio', () => {
-            document.getElementById('status').innerHTML = 'Sua vez';
-        });
-        
-        socket.on('jogada', d => {
-            document.getElementsByClassName('cell')[d.pos].innerHTML = d.simbolo;
-            minhaVez = !minhaVez;
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do celular';
-        });
-        
-        socket.on('fim', d => document.getElementById('status').innerHTML = d.msg);
-        
-        socket.on('reiniciar', () => {
-            document.querySelectorAll('.cell').forEach(c => c.innerHTML='');
-            minhaVez = true;
-        });
-        
-        document.getElementById('reset').onclick = () => socket.emit('reiniciar');
-    </script>
-</body>
-</html>
-    `);
-  }
+  `);
 });
 
-// Lógica do jogo
-let board = ['','','','','','','','',''];
-let vez = 'X';
-let pc = null, mobile = null;
-
-function checkWinner() {
-  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  for(let l of lines) if(board[l[0]] && board[l[0]]==board[l[1]] && board[l[0]]==board[l[2]]) return board[l[0]];
-  return null;
-}
-
-io.on('connection', s => {
-  console.log('Conectado:', s.id);
+// Socket.IO para broadcast
+io.on('connection', (socket) => {
+  console.log('Cliente conectado');
   
-  if(!pc) { pc = s.id; s.emit('inicio', {vez:'X'}); }
-  else if(!mobile) { mobile = s.id; s.emit('inicio', {vez:'O'}); }
-  
-  s.on('offer', o => s.broadcast.emit('offer', o));
-  s.on('answer', a => s.broadcast.emit('answer', a));
-  s.on('candidate', c => s.broadcast.emit('candidate', c));
-  
-  s.on('jogada', pos => {
-    let jogador = s.id==pc ? 'X' : 'O';
-    if(jogador!=vez || board[pos]!='') return;
-    
-    board[pos] = jogador;
-    let vencedor = checkWinner();
-    
-    if(vencedor) io.emit('fim', {msg: \`\${vencedor} venceu!\`});
-    else if(!board.includes('')) io.emit('fim', {msg:'Empate!'});
-    else vez = vez=='X'?'O':'X';
-    
-    io.emit('jogada', {pos, simbolo:jogador});
-  });
-  
-  s.on('reiniciar', () => {
-    board = ['','','','','','','','',''];
-    vez = 'X';
-    io.emit('reiniciar');
-  });
-  
-  s.on('disconnect', () => {
-    if(s.id==pc) pc=null;
-    if(s.id==mobile) mobile=null;
-    board = ['','','','','','','','',''];
-    vez='X';
+  socket.on('frame', (frameData) => {
+    socket.broadcast.emit('frame', frameData);
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('Servidor rodando na porta', PORT);
+server.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
