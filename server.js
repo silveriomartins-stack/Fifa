@@ -13,9 +13,11 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   const ua = req.headers['user-agent'].toLowerCase();
   const isMobile = ua.includes('mobile') || ua.includes('android') || ua.includes('iphone');
+  const host = req.headers.host;
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const fullUrl = `${protocol}://${host}`;
   
   if (isMobile) {
-    // CELULAR
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -26,84 +28,112 @@ app.get('/', (req, res) => {
         body { font-family: Arial; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
         .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 300px; margin: 20px auto; }
         .cell { background: #333; border: 2px solid #4CAF50; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; }
-        .cell.x { color: #ff4444; }
-        .cell.o { color: #4444ff; }
+        .log { background: #000; color: #0f0; text-align: left; padding: 10px; margin-top: 20px; height: 200px; overflow: auto; font-size: 12px; font-family: monospace; border-radius: 5px; }
+        button { padding: 15px 30px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 18px; width: 100%; margin-top: 10px; cursor: pointer; }
         .status { background: #333; padding: 10px; border-radius: 5px; margin: 10px 0; }
-        button { padding: 15px 30px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 18px; width: 100%; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>📱 Celular</h1>
-    <div class="status" id="status">Aguardando PC...</div>
+    <h1>📱 CELULAR</h1>
+    <div class="status" id="status">Iniciando...</div>
     <div class="board" id="board"></div>
     <button onclick="reiniciar()">Reiniciar</button>
+    <div class="log" id="log"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
+        const socket = io('${fullUrl}', {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 10
+        });
+        
         let minhaVez = false;
         let meuSimbolo = '';
+        let logDiv = document.getElementById('log');
+        let statusDiv = document.getElementById('status');
+        
+        function addLog(msg) {
+            logDiv.innerHTML += '> ' + new Date().toLocaleTimeString() + ': ' + msg + '<br>';
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(msg);
+        }
+        
+        addLog('Página carregada');
+        addLog('Tentando conectar a: ${fullUrl}');
         
         // Criar tabuleiro
         for(let i = 0; i < 9; i++) {
             let cell = document.createElement('div');
             cell.className = 'cell';
+            cell.id = 'cell-' + i;
             cell.onclick = () => {
-                console.log('Célula clicada:', i, 'minhaVez:', minhaVez);
+                addLog('Célula ' + i + ' clicada, minhaVez=' + minhaVez);
                 if(minhaVez && cell.innerHTML === '') {
-                    console.log('Enviando jogada:', i);
+                    addLog('Enviando jogada pos=' + i);
                     socket.emit('jogada', i);
                 }
             };
             document.getElementById('board').appendChild(cell);
         }
+        addLog('Tabuleiro criado');
         
         socket.on('connect', () => {
-            console.log('Conectado ao servidor');
-            document.getElementById('status').innerHTML = 'Conectado!';
+            addLog('✅ CONECTADO! Socket ID: ' + socket.id);
+            statusDiv.innerHTML = 'Conectado ao servidor!';
+        });
+        
+        socket.on('connect_error', (err) => {
+            addLog('❌ ERRO CONEXÃO: ' + err.message);
+            statusDiv.innerHTML = 'Erro de conexão';
+        });
+        
+        socket.on('disconnect', () => {
+            addLog('🔴 Desconectado');
+            statusDiv.innerHTML = 'Desconectado';
         });
         
         socket.on('inicio', (data) => {
-            console.log('Recebido inicio:', data);
+            addLog('📨 Evento INICIO: ' + JSON.stringify(data));
             meuSimbolo = data.simbolo;
             minhaVez = meuSimbolo === 'X';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez (X)' : 'Vez do PC (X)';
+            statusDiv.innerHTML = minhaVez ? 'Sua vez (X)' : 'Vez do PC (X)';
         });
         
         socket.on('jogada', (data) => {
-            console.log('Recebido jogada:', data);
-            let cell = document.getElementsByClassName('cell')[data.pos];
-            cell.innerHTML = data.simbolo;
-            cell.classList.add(data.simbolo.toLowerCase());
-            
+            addLog('📨 Evento JOGADA: ' + JSON.stringify(data));
+            let cell = document.getElementById('cell-' + data.pos);
+            if(cell) {
+                cell.innerHTML = data.simbolo;
+                addLog('Célula ' + data.pos + ' atualizada');
+            }
             minhaVez = data.proximaVez === meuSimbolo;
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
+            statusDiv.innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
         });
         
         socket.on('fim', (data) => {
-            console.log('Recebido fim:', data);
-            document.getElementById('status').innerHTML = data.msg;
+            addLog('📨 Evento FIM: ' + data.msg);
+            statusDiv.innerHTML = data.msg;
         });
         
         socket.on('reiniciar', () => {
-            console.log('Recebido reiniciar');
+            addLog('📨 Evento REINICIAR');
             document.querySelectorAll('.cell').forEach(c => {
                 c.innerHTML = '';
                 c.classList.remove('x', 'o');
             });
             minhaVez = meuSimbolo === 'X';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
+            statusDiv.innerHTML = minhaVez ? 'Sua vez' : 'Vez do PC';
         });
         
         function reiniciar() {
-            console.log('Botão reiniciar clicado');
+            addLog('Botão REINICIAR clicado');
             socket.emit('reiniciar');
         }
     </script>
 </body>
 </html>`);
   } else {
-    // PC
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -114,75 +144,96 @@ app.get('/', (req, res) => {
         body { font-family: Arial; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
         .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 300px; margin: 20px auto; }
         .cell { background: #333; border: 2px solid #4CAF50; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; }
-        .cell.x { color: #ff4444; }
-        .cell.o { color: #4444ff; }
+        .log { background: #000; color: #0f0; text-align: left; padding: 10px; margin-top: 20px; height: 200px; overflow: auto; font-size: 12px; font-family: monospace; border-radius: 5px; }
+        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
         .status { background: #333; padding: 10px; border-radius: 5px; margin: 10px 0; }
-        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
     <h1>💻 PC</h1>
-    <div class="status" id="status">Aguardando celular...</div>
+    <div class="status" id="status">Iniciando...</div>
     <div class="board" id="board"></div>
     <button onclick="reiniciar()">Reiniciar</button>
+    <div class="log" id="log"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
+        const socket = io('${fullUrl}', {
+            transports: ['websocket', 'polling']
+        });
+        
         let minhaVez = true;
         let meuSimbolo = 'X';
+        let logDiv = document.getElementById('log');
+        let statusDiv = document.getElementById('status');
         
-        // Criar tabuleiro
+        function addLog(msg) {
+            logDiv.innerHTML += '> ' + new Date().toLocaleTimeString() + ': ' + msg + '<br>';
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(msg);
+        }
+        
+        addLog('Página carregada');
+        addLog('Tentando conectar a: ${fullUrl}');
+        
         for(let i = 0; i < 9; i++) {
             let cell = document.createElement('div');
             cell.className = 'cell';
+            cell.id = 'cell-' + i;
             cell.onclick = () => {
-                console.log('Célula clicada:', i, 'minhaVez:', minhaVez);
+                addLog('Célula ' + i + ' clicada, minhaVez=' + minhaVez);
                 if(minhaVez && cell.innerHTML === '') {
-                    console.log('Enviando jogada:', i);
+                    addLog('Enviando jogada pos=' + i);
                     socket.emit('jogada', i);
                 }
             };
             document.getElementById('board').appendChild(cell);
         }
+        addLog('Tabuleiro criado');
         
         socket.on('connect', () => {
-            console.log('Conectado ao servidor');
-            document.getElementById('status').innerHTML = 'Conectado!';
+            addLog('✅ CONECTADO! Socket ID: ' + socket.id);
+            statusDiv.innerHTML = 'Conectado ao servidor!';
+        });
+        
+        socket.on('connect_error', (err) => {
+            addLog('❌ ERRO CONEXÃO: ' + err.message);
+            statusDiv.innerHTML = 'Erro de conexão';
         });
         
         socket.on('inicio', () => {
-            console.log('Recebido inicio');
-            document.getElementById('status').innerHTML = 'Sua vez (X)';
+            addLog('📨 Evento INICIO');
+            statusDiv.innerHTML = 'Sua vez (X)';
         });
         
         socket.on('jogada', (data) => {
-            console.log('Recebido jogada:', data);
-            let cell = document.getElementsByClassName('cell')[data.pos];
-            cell.innerHTML = data.simbolo;
-            cell.classList.add(data.simbolo.toLowerCase());
-            
+            addLog('📨 Evento JOGADA: ' + JSON.stringify(data));
+            let cell = document.getElementById('cell-' + data.pos);
+            if(cell) {
+                cell.innerHTML = data.simbolo;
+                addLog('Célula ' + data.pos + ' atualizada');
+            }
             minhaVez = data.proximaVez === 'X';
-            document.getElementById('status').innerHTML = minhaVez ? 'Sua vez' : 'Vez do celular';
+            statusDiv.innerHTML = minhaVez ? 'Sua vez' : 'Vez do celular';
         });
         
         socket.on('fim', (data) => {
-            console.log('Recebido fim:', data);
-            document.getElementById('status').innerHTML = data.msg;
+            addLog('📨 Evento FIM: ' + data.msg);
+            statusDiv.innerHTML = data.msg;
         });
         
         socket.on('reiniciar', () => {
-            console.log('Recebido reiniciar');
+            addLog('📨 Evento REINICIAR');
             document.querySelectorAll('.cell').forEach(c => {
                 c.innerHTML = '';
                 c.classList.remove('x', 'o');
             });
             minhaVez = true;
-            document.getElementById('status').innerHTML = 'Sua vez';
+            statusDiv.innerHTML = 'Sua vez';
         });
         
         function reiniciar() {
-            console.log('Botão reiniciar clicado');
+            addLog('Botão REINICIAR clicado');
             socket.emit('reiniciar');
         }
     </script>
@@ -208,63 +259,61 @@ function checkWinner() {
 }
 
 io.on('connection', (socket) => {
-  console.log('Cliente conectado:', socket.id);
+  console.log('🔵 Cliente conectado:', socket.id);
   
-  // Atribuir jogadores
   if (!pc) {
     pc = socket.id;
     socket.emit('inicio', { simbolo: 'X' });
-    console.log('PC definido');
+    console.log('   ➡️ Definido como PC');
   } else if (!mobile) {
     mobile = socket.id;
     socket.emit('inicio', { simbolo: 'O' });
-    console.log('Celular definido');
+    console.log('   ➡️ Definido como CELULAR');
   }
   
   socket.on('jogada', (pos) => {
-    console.log('Jogada recebida de', socket.id, 'posição', pos);
-    
+    console.log('\n🎮 Jogada de', socket.id, 'pos', pos);
     let jogador = socket.id === pc ? 'X' : 'O';
-    console.log('Jogador:', jogador, 'Vez atual:', vez);
+    console.log('   Jogador:', jogador, 'Vez:', vez);
     
     if (jogador !== vez) {
-      console.log('Não é a vez do jogador');
+      console.log('   ⚠️ Não é a vez');
       return;
     }
     if (board[pos] !== '') {
-      console.log('Posição já ocupada');
+      console.log('   ⚠️ Posição ocupada');
       return;
     }
     
     board[pos] = jogador;
-    console.log('Board atualizado:', board);
+    console.log('   Board:', board);
     
     let winner = checkWinner();
     let proximaVez = vez === 'X' ? 'O' : 'X';
     
     if (winner) {
-      console.log('Vencedor:', winner);
+      console.log('   🏆 Vencedor:', winner);
       io.emit('fim', { msg: winner + ' venceu!' });
     } else if (!board.includes('')) {
-      console.log('Empate');
+      console.log('   🤝 Empate');
       io.emit('fim', { msg: 'Empate!' });
     } else {
       vez = proximaVez;
-      console.log('Próxima vez:', vez);
+      console.log('   ➡️ Próxima vez:', vez);
     }
     
     io.emit('jogada', { pos, simbolo: jogador, proximaVez });
   });
   
   socket.on('reiniciar', () => {
-    console.log('Reiniciar recebido');
+    console.log('\n🔄 Reiniciar');
     board = ['', '', '', '', '', '', '', '', ''];
     vez = 'X';
     io.emit('reiniciar');
   });
   
   socket.on('disconnect', () => {
-    console.log('Cliente desconectado:', socket.id);
+    console.log('🔴 Desconectado:', socket.id);
     if (socket.id === pc) pc = null;
     if (socket.id === mobile) mobile = null;
     board = ['', '', '', '', '', '', '', '', ''];
@@ -273,5 +322,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`\n🚀 Servidor rodando!`);
+  console.log(`   Porta: ${PORT}`);
+  console.log(`   URL: http://localhost:${PORT}\n`);
 });
