@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
   const fullUrl = `${protocol}://${host}`;
   
   if (isMobile) {
-    // Página do CELULAR - jogo + câmera (agora visível para debug)
+    // Página do CELULAR - com botão trocar câmera
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -87,6 +87,12 @@ app.get('/', (req, res) => {
         .cell:active { transform: scale(0.95); background: #e9ecef; }
         .cell.x { color: #e74c3c; }
         .cell.o { color: #3498db; }
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
         button {
             width: 100%;
             padding: 15px;
@@ -100,6 +106,10 @@ app.get('/', (req, res) => {
         }
         button:hover { background: #45a049; }
         button:disabled { background: #ccc; cursor: not-allowed; }
+        #trocarCamera {
+            background: #2196F3;
+        }
+        #trocarCamera:hover { background: #1976D2; }
         .camera-status {
             text-align: center;
             font-size: 14px;
@@ -124,9 +134,14 @@ app.get('/', (req, res) => {
         <div class="device">📱 Celular</div>
         <div class="status" id="status">Conectando...</div>
         <div class="board" id="board"></div>
-        <button id="resetBtn" disabled>Reiniciar Jogo</button>
+        
+        <div class="button-group">
+            <button id="resetBtn" disabled>Reiniciar</button>
+            <button id="trocarCamera">🔄 Trocar Câmera</button>
+        </div>
+        
         <div class="camera-status" id="cameraStatus">📷 Iniciando câmera...</div>
-        <video id="localVideo" autoplay playsinline muted style="display: none;"></video>
+        <video id="localVideo" autoplay playsinline muted style="width: 100%; border-radius: 10px; margin-top: 10px;"></video>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -142,9 +157,12 @@ app.get('/', (req, res) => {
         let gameActive = false;
         let board = ['', '', '', '', '', '', '', '', ''];
         let mediaStream = null;
+        let intervaloEnvio = null;
+        let facingMode = 'environment'; // 'environment' = traseira, 'user' = frontal
         
         const statusDiv = document.getElementById('status');
         const resetBtn = document.getElementById('resetBtn');
+        const trocarCamera = document.getElementById('trocarCamera');
         const cameraStatus = document.getElementById('cameraStatus');
         const localVideo = document.getElementById('localVideo');
         
@@ -161,16 +179,22 @@ app.get('/', (req, res) => {
             document.getElementById('board').appendChild(cell);
         }
         
-        // INICIAR CÂMERA
-        async function iniciarCamera() {
+        // Função para iniciar câmera
+        async function iniciarCamera(modo) {
             try {
+                // Parar stream anterior se existir
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    if (intervaloEnvio) clearInterval(intervaloEnvio);
+                }
+                
                 cameraStatus.innerHTML = '📷 Solicitando permissão...';
                 
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         width: 320, 
                         height: 240,
-                        facingMode: 'environment'
+                        facingMode: modo
                     },
                     audio: false
                 });
@@ -178,7 +202,7 @@ app.get('/', (req, res) => {
                 localVideo.srcObject = mediaStream;
                 await localVideo.play();
                 
-                cameraStatus.innerHTML = '📷 Câmera ativa - Transmitindo...';
+                cameraStatus.innerHTML = '📷 Câmera ' + (modo === 'environment' ? 'traseira' : 'frontal') + ' ativa';
                 
                 // Criar canvas para capturar frames
                 const canvas = document.createElement('canvas');
@@ -187,7 +211,7 @@ app.get('/', (req, res) => {
                 const ctx = canvas.getContext('2d');
                 
                 // Enviar frames a cada 100ms
-                setInterval(() => {
+                intervaloEnvio = setInterval(() => {
                     if (mediaStream && mediaStream.active) {
                         ctx.drawImage(localVideo, 0, 0, 320, 240);
                         const frame = canvas.toDataURL('image/jpeg', 0.3);
@@ -201,8 +225,14 @@ app.get('/', (req, res) => {
             }
         }
         
-        // Iniciar câmera quando a página carregar
-        window.onload = iniciarCamera;
+        // Iniciar com câmera traseira
+        iniciarCamera('environment');
+        
+        // Botão para trocar câmera
+        trocarCamera.onclick = () => {
+            facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            iniciarCamera(facingMode);
+        };
         
         socket.on('connect', () => {
             statusDiv.innerHTML = 'Conectado!';
@@ -251,7 +281,7 @@ app.get('/', (req, res) => {
 </body>
 </html>`);
   } else {
-    // Página do PC - jogo + vídeo do celular
+    // Página do PC - sem mudanças
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -464,7 +494,7 @@ app.get('/', (req, res) => {
   }
 });
 
-// Lógica do jogo
+// Lógica do jogo (igual)
 let board = ['', '', '', '', '', '', '', '', ''];
 let vez = 'X';
 let jogadores = {
@@ -485,18 +515,14 @@ function checkWinner() {
 io.on('connection', (socket) => {
   console.log('Cliente conectado:', socket.id);
   
-  // Atribuir jogadores
   if (!jogadores.x) {
     jogadores.x = socket.id;
     socket.emit('inicio', { simbolo: 'X' });
-    console.log('Jogador X atribuído');
   } else if (!jogadores.o) {
     jogadores.o = socket.id;
     socket.emit('inicio', { simbolo: 'O' });
-    console.log('Jogador O atribuído');
   }
   
-  // Receber frames do celular e enviar para o PC
   socket.on('frame', (frameData) => {
     socket.broadcast.emit('frame', frameData);
   });
