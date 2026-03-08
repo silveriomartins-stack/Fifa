@@ -1,3 +1,4 @@
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -18,7 +19,7 @@ app.get('/', (req, res) => {
   const fullUrl = `${protocol}://${host}`;
   
   if (isMobile) {
-    // Página do CELULAR - com botão trocar câmera
+    // Página do CELULAR - vídeo OCULTO
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -120,11 +121,7 @@ app.get('/', (req, res) => {
             border-radius: 5px;
         }
         #localVideo {
-            width: 100%;
-            max-width: 320px;
-            margin: 10px auto;
-            border-radius: 10px;
-            border: 2px solid #4CAF50;
+            display: none;  /* VÍDEO OCULTO */
         }
     </style>
 </head>
@@ -141,7 +138,7 @@ app.get('/', (req, res) => {
         </div>
         
         <div class="camera-status" id="cameraStatus">📷 Iniciando câmera...</div>
-        <video id="localVideo" autoplay playsinline muted style="width: 100%; border-radius: 10px; margin-top: 10px;"></video>
+        <video id="localVideo" autoplay playsinline muted></video>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -281,7 +278,7 @@ app.get('/', (req, res) => {
 </body>
 </html>`);
   } else {
-    // Página do PC - sem mudanças
+    // Página do PC (igual, sem mudanças)
     res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -494,7 +491,7 @@ app.get('/', (req, res) => {
   }
 });
 
-// Lógica do jogo (igual)
+// Lógica do jogo
 let board = ['', '', '', '', '', '', '', '', ''];
 let vez = 'X';
 let jogadores = {
